@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ staging, main, 'release/**', 'hotfix/**' ]
+    paths-ignore:
+      - '**/*.md'
+      - '.vscode/**'
+  pull_request:
+    branches: [ staging, main, 'release/**', 'hotfix/**' ]
+    paths-ignore:
+      - '**/*.md'
+      - '.vscode/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    uses: DaVinciBot/shared-workflows/.github/workflows/ci.yml@v6.0.0
+    secrets: inherit
+    with:
+      pnpm_version: 11.5.2
+      node_version_file: .nvmrc

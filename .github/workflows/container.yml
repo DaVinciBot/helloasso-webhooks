@@ -1,0 +1,36 @@
+name: Container
+
+on:
+  push:
+    branches: [ staging, main, 'release/**', 'hotfix/**' ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ staging, main, 'release/**', 'hotfix/**' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+
+jobs:
+  build-and-publish:
+    name: Build and Publish
+    uses: DaVinciBot/shared-workflows/.github/workflows/container.yml@v6.0.0
+    with:
+      push: ${{ github.event_name == 'push' }}
+    secrets: inherit
+
+  deploy-staging:
+    name: Deploy Staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    needs: build-and-publish
+    uses: DaVinciBot/shared-workflows/.github/workflows/deploy.yml@v6.0.0
+    with:
+      environment: staging
+      health_url: https://hook.staging.davincibot.fr/health
+    secrets: inherit

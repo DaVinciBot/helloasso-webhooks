@@ -1,0 +1,44 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment.
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      image_tag:
+        description: Explicit tag to deploy (e.g. sha-<commit> for a rollback). Leave empty for the default (staging -> staging, prod -> main).
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    name: Deploy Staging
+    if: inputs.environment == 'staging'
+    uses: DaVinciBot/shared-workflows/.github/workflows/deploy.yml@v6.0.0
+    with:
+      environment: staging
+      image_tag: ${{ inputs.image_tag }}
+      health_url: https://hook.staging.davincibot.fr/health
+    secrets: inherit
+
+  deploy-prod:
+    name: Deploy Prod
+    if: inputs.environment == 'prod'
+    uses: DaVinciBot/shared-workflows/.github/workflows/deploy.yml@v6.0.0
+    with:
+      environment: prod
+      image_tag: ${{ inputs.image_tag }}
+      health_url: https://hook.davincibot.fr/health
+    secrets: inherit
