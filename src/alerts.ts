@@ -3,7 +3,7 @@ import type { FetchLike } from './helloasso.js';
 import type { Logger } from './logger.js';
 
 /**
- * Alerte humaine sur webhook Discord (ou Slack).
+ * Alerte humaine sur webhook Discord.
  *
  * Sert les cas où le service a fait son travail mais où la *donnée* est
  * fautive : un membre a payé et aucune ligne Notion ne porte son email. Le
@@ -28,18 +28,30 @@ export interface AlerterDeps {
 	readonly fetch?: FetchLike;
 }
 
-/** Discord attend `content`, Slack attend `text`. */
-function bodyFor(url: string, message: string): string {
-	const isSlack = new URL(url).hostname.endsWith('slack.com');
-	return JSON.stringify(isSlack ? { text: message } : { content: message });
-}
+// Rouge des signalements « bug » de cash (edge function report-to-discord) :
+// les alertes se lisent dans le même Discord, elles en gardent la couleur.
+const ALERT_COLOR = 0xef4444;
 
-export function formatAlert(alert: Alert): string {
-	const lines = Object.entries(alert.fields)
-		.filter((entry): entry is [string, string | number] => entry[1] !== undefined)
-		.map(([key, value]) => `• **${key}** : ${String(value)}`);
-
-	return [`⚠️ **${alert.title}**`, ...lines].join('\n');
+/**
+ * Embed Discord. Les valeurs viennent de messages d'erreur et de données
+ * membres : troncature défensive aux limites de l'API, et aucune mention
+ * déclenchable depuis leur contenu.
+ */
+export function formatEmbed(alert: Alert): Record<string, unknown> {
+	return {
+		title: `⚠️ ${alert.title}`.slice(0, 256),
+		color: ALERT_COLOR,
+		timestamp: new Date().toISOString(),
+		// Un champ `undefined` n'apprend rien à un humain : il n'est pas rendu.
+		fields: Object.entries(alert.fields)
+			.filter((entry): entry is [string, string | number] => entry[1] !== undefined)
+			.slice(0, 25)
+			.map(([key, value]) => ({
+				name: key.slice(0, 256),
+				value: String(value).slice(0, 1024),
+				inline: false
+			}))
+	};
 }
 
 /**
@@ -70,7 +82,10 @@ export function createAlerter(webhookUrl: string | undefined, deps: AlerterDeps)
 				const response = await doFetch(webhookUrl, {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: bodyFor(webhookUrl, formatAlert(alert)),
+					body: JSON.stringify({
+						embeds: [formatEmbed(alert)],
+						allowed_mentions: { parse: [] }
+					}),
 					signal: AbortSignal.timeout(deps.timeoutMs)
 				});
 

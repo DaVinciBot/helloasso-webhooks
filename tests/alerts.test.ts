@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAlerter, formatAlert } from '../src/alerts.js';
+import { createAlerter, formatEmbed } from '../src/alerts.js';
 import { silentLogger } from './helpers.js';
 
 const alert = {
@@ -29,14 +29,22 @@ function sentBody(fetchMock: ReturnType<typeof vi.fn>): unknown {
 	return (call[1] as RequestInit | undefined)?.body;
 }
 
-describe('formatAlert', () => {
+describe('formatEmbed', () => {
 	it('met en forme le titre et les champs renseignés', () => {
-		const message = formatAlert(alert);
+		const embed = formatEmbed(alert);
 
-		expect(message).toContain('Cotisation payée sans ligne Notion correspondante');
-		expect(message).toContain('paiement');
-		expect(message).toContain('a@b.fr');
-		expect(message).not.toContain('absent');
+		expect(embed.title).toContain('Cotisation payée sans ligne Notion correspondante');
+		expect(embed.fields).toEqual([
+			{ name: 'paiement', value: '12345', inline: false },
+			{ name: 'email', value: 'a@b.fr', inline: false }
+		]);
+	});
+
+	it("tronque aux limites de l'API Discord", () => {
+		const embed = formatEmbed({ title: 'x'.repeat(400), fields: { long: 'y'.repeat(2000) } });
+
+		expect(String(embed.title)).toHaveLength(256);
+		expect(embed.fields).toEqual([{ name: 'long', value: 'y'.repeat(1024), inline: false }]);
 	});
 });
 
@@ -48,23 +56,30 @@ describe('createAlerter', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it('envoie le champ `content` attendu par Discord', async () => {
+	it('envoie un embed rouge à Discord', async () => {
 		const fetchMock = vi.fn((_url: string, _init: RequestInit) =>
 			Promise.resolve(new Response('', { status: 204 }))
 		);
 		await alerter('https://discord.com/api/webhooks/1/abc', fetchMock).notify(alert);
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
-		expect(JSON.parse(String(sentBody(fetchMock)))).toHaveProperty('content');
-	});
-
-	it('envoie le champ `text` attendu par Slack', async () => {
-		const fetchMock = vi.fn((_url: string, _init: RequestInit) =>
-			Promise.resolve(new Response('', { status: 200 }))
-		);
-		await alerter('https://hooks.slack.com/services/T/B/X', fetchMock).notify(alert);
-
-		expect(JSON.parse(String(sentBody(fetchMock)))).toHaveProperty('text');
+		const body: unknown = JSON.parse(String(sentBody(fetchMock)));
+		expect(body).not.toHaveProperty('content');
+		expect(body).toMatchObject({
+			embeds: [
+				{
+					title: expect.stringContaining(
+						'Cotisation payée sans ligne Notion correspondante'
+					) as unknown,
+					color: 0xef4444,
+					fields: [
+						{ name: 'paiement', value: '12345' },
+						{ name: 'email', value: 'a@b.fr' }
+					]
+				}
+			],
+			allowed_mentions: { parse: [] }
+		});
 	});
 
 	it('avale une panne du webhook plutôt que de faire échouer le paiement', async () => {
