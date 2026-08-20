@@ -1,0 +1,40 @@
+{
+	"data": {
+		"order": {
+			"id": 98765,
+			"date": "2026-08-17T10:12:03.000Z",
+			"formSlug": "adhesion-2026-2027",
+			"formType": "Membership",
+			"organizationSlug": "davincibot"
+		},
+		"payer": {
+			"email": "Membre.Test@Example.Org",
+			"firstName": "Membre",
+			"lastName": "Test",
+			"country": "FRA"
+		},
+		"items": [
+			{
+				"id": 55501,
+				"shareAmount": 2000,
+				"shareItemAmount": 2000,
+				"type": "Membership",
+				"state": "Processed"
+			}
+		],
+		"cashOutState": "Transfered",
+		"paymentReceiptUrl": "https://www.helloasso.com/associations/davincibot/adhesions/adhesion-2026-2027/paiement/12345",
+		"id": 12345,
+		"amount": 2000,
+		"date": "2026-08-17T10:12:05.000Z",
+		"paymentMeans": "Card",
+		"installmentNumber": 1,
+		"state": "Authorized",
+		"meta": {
+			"createdAt": "2026-08-17T10:12:05.000Z",
+			"updatedAt": "2026-08-17T10:12:06.000Z"
+		}
+	},
+	"eventType": "Payment",
+	"metadata": {}
+}

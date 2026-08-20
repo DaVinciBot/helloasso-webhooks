@@ -158,9 +158,29 @@ un autre schéma que celui qu'il a créé n'aurait pas de sens. Le rendre variab
 Supabase — `SupabaseClient` indexé par `string` résout chaque ligne en `never` — pour une flexibilité que personne
 n'utiliserait.
 
+### `NOTION_DATA_SOURCE_ID`
+
+Le service interroge une **source de données**, pas une base et pas une vue.
+
+Depuis l'API `2025-09-03`, une base Notion n'est plus qu'un contenant : ce sont ses sources de données qui portent les
+propriétés et les lignes, et `POST /v1/data_sources/{id}/query` remplace l'ancien
+`POST /v1/databases/{id}/query`. Une base peut en compter plusieurs ; désigner la base laissait Notion en choisir une —
+la première — ce qui n'est un comportement acceptable que tant que personne n'en ajoute une seconde.
+
+La configuration nomme donc directement la source à interroger. On aurait pu ne demander que l'id de la base et résoudre
+la source au démarrage via `databases.retrieve`, mais cela ajouterait un appel réseau au boot, un mode de panne
+supplémentaire, et rendrait arbitraire le choix parmi plusieurs sources — pour économiser une ligne de `.env` relevée
+une fois.
+
+L'id se relève dans le menu `•••` de la base → **Manage data sources** → **Copy data source ID** (voir
+[`runbook-production.md`](runbook-production.md) § 1.3).
+
+`NOTION_VERSION` est validée au démarrage : une version antérieure à `2025-09-03` ne connaît pas les sources de données
+et est refusée, plutôt que de laisser chaque recherche échouer sur un `validation_error` opaque.
+
 ### `NOTION_EMAIL_PROPERTY_TYPE`
 
-Le filtre de `databases.query` n'a pas la même forme selon le type de la propriété :
+Le filtre de `dataSources.query` n'a pas la même forme selon le type de la propriété :
 
 ```json
 {

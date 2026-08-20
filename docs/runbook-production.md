@@ -51,14 +51,14 @@ Copie le **Internal Integration Secret** (commence par `ntn_`).
 > Sans cette étape, l'API répond `object_not_found` sur une base qui existe
 > pourtant. C'est l'oubli le plus fréquent.
 
-**1.3** Relève l'id dans l'URL :
+**1.3** Relève l'id de la **source de données** : menu `•••` → **Manage data sources** → `•••` de la source →
+**Copy data source ID**.
 
-```
-https://www.notion.so/davincibot/a1b2c3d4e5f67890a1b2c3d4e5f67890?v=...
-                                 └──────────── 32 caractères ────────────┘
-```
+> Ce n'est **pas** l'id visible dans l'URL : celui-là désigne la base (le contenant), et le `?v=` une vue. Le service
+> interroge la source de données, qui seule porte les lignes. Voir
+> [`architecture.md`](architecture.md) § `NOTION_DATA_SOURCE_ID`.
 
-→ `NOTION_DATABASE_ID` = `<À_REMPLIR>`
+→ `NOTION_DATA_SOURCE_ID` = `<À_REMPLIR>`
 
 **1.4** Relève le **nom exact** de la propriété contenant l'email — casse, accents et espaces compris — et son **type**.
 
@@ -71,8 +71,9 @@ https://www.notion.so/davincibot/a1b2c3d4e5f67890a1b2c3d4e5f67890?v=...
 
 **1.6 — pour staging.** Duplique la base (`•••` → **Duplicate**), renomme-la
 `Membres — test`, connecte-lui la même intégration, et garde-y deux ou trois lignes avec des adresses que tu contrôles.
+Relève l'id de **sa** source de données comme en 1.3 — la copie a la sienne.
 
-→ `NOTION_DATABASE_ID` (staging) = `<À_REMPLIR>`
+→ `NOTION_DATA_SOURCE_ID` (staging) = `<À_REMPLIR>`
 
 ---
 
