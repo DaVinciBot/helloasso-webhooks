@@ -1,0 +1,24 @@
+# Déploiement staging — à copier dans /srv/hook/staging/ sur le VPS.
+#
+# Identique à la production, au tag et au nom près. Le .env de cet
+# environnement doit pointer vers le bac à sable HelloAsso
+# (api.helloasso-sandbox.com) et une base Notion de test : c'est tout l'intérêt
+# de cet environnement, dérouler un vrai paiement sans mouvement d'argent ni
+# tunnel vers un poste de développement.
+
+name: hook-staging
+
+services:
+  app:
+    image: ghcr.io/davincibot/helloasso-notion-webhook:staging
+    container_name: hook-staging
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - 'com.centurylinklabs.watchtower.enable=true'
+    networks:
+      - web
+
+networks:
+  web:
+    external: true

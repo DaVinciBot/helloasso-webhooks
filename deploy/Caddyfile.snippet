@@ -1,0 +1,84 @@
+# Blocs à ajouter à /srv/proxy/Caddyfile sur le VPS, puis :
+#
+#   docker compose -f /srv/proxy/docker-compose.yml exec caddy \
+#     caddy validate --config /etc/caddy/Caddyfile
+#   docker compose -f /srv/proxy/docker-compose.yml exec caddy \
+#     caddy reload --config /etc/caddy/Caddyfile
+#
+# Caddy obtient et renouvelle le certificat TLS tout seul : il suffit que les
+# enregistrements DNS pointent sur le VPS avant le rechargement.
+#
+# Deux particularités par rapport aux autres hôtes du fichier :
+#
+#   1. `/health` est exposé publiquement. `shared-workflows/deploy.yml` le sonde
+#      après chaque déploiement pour confirmer la mise en ligne.
+#   2. Le chemin des requêtes est expurgé des journaux. Il contient le secret du
+#      webhook, seule barrière d'authentification du service — les comptes
+#      association HelloAsso ne signent pas leurs notifications.
+
+hook.davincibot.fr {
+	header Strict-Transport-Security "max-age=31536000"
+
+	log {
+		format filter {
+			wrap console
+			fields {
+				request>uri replace /webhook/REDACTED
+			}
+		}
+	}
+
+	request_body {
+		max_size 256KB
+	}
+
+	handle /health {
+		reverse_proxy hook-prod:3000
+	}
+
+	handle /webhook/* {
+		reverse_proxy hook-prod:3000 {
+			# Le traitement est borné à PROCESS_TIMEOUT_MS (12 s par défaut).
+			transport http {
+				response_header_timeout 20s
+			}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}
+
+hook.staging.davincibot.fr {
+	header Strict-Transport-Security "max-age=31536000"
+
+	log {
+		format filter {
+			wrap console
+			fields {
+				request>uri replace /webhook/REDACTED
+			}
+		}
+	}
+
+	request_body {
+		max_size 256KB
+	}
+
+	handle /health {
+		reverse_proxy hook-staging:3000
+	}
+
+	handle /webhook/* {
+		reverse_proxy hook-staging:3000 {
+			transport http {
+				response_header_timeout 20s
+			}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

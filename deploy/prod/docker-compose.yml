@@ -1,0 +1,28 @@
+# Déploiement production — à copier dans /srv/hook/prod/ sur le VPS,
+# accompagné d'un .env dérivé de ../../.env.example.
+#
+#   docker compose up -d
+#
+# Le conteneur ne publie aucun port : Caddy le joint par le réseau `web`, sous
+# le nom `hook-prod`. Les mises à jour sont déclenchées par CI via l'API HTTP de
+# Watchtower, pas par polling — d'où le label ci-dessous, sans lequel Watchtower
+# ignore le conteneur.
+#
+# Le tag suit la convention de la flotte : la branche, donc `main` pour la prod.
+
+name: hook-prod
+
+services:
+  app:
+    image: ghcr.io/davincibot/helloasso-notion-webhook:main
+    container_name: hook-prod
+    restart: unless-stopped
+    env_file: .env
+    labels:
+      - 'com.centurylinklabs.watchtower.enable=true'
+    networks:
+      - web
+
+networks:
+  web:
+    external: true
