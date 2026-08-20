@@ -66,7 +66,7 @@ C'est la seule barrière disponible. Elle est traitée en conséquence :
 Le choix du code HTTP n'est pas cosmétique : il décide si HelloAsso rejoue.
 
 | Classe           | Réponse | Rejeu | Exemples                                             |
-| ---------------- | ------- | ----- | ---------------------------------------------------- |
+|------------------|---------|-------|------------------------------------------------------|
 | `TransientError` | 503     | oui   | réseau coupé, 5xx amont, quota, timeout, Supabase HS |
 | `DataError`      | 200     | non   | email inconnu de Notion, propriété inexistante       |
 | `ConfigError`    | —       | —     | jetée au démarrage, le process refuse de se lancer   |
@@ -211,14 +211,14 @@ dans une colonne texte, le type est une variable d'environnement plutôt qu'une 
 Le service se conforme aux conventions d'infrastructure de DaVinciBot plutôt que d'y faire exception.
 
 | Convention de la flotte                          | Application ici                                                  |
-| ------------------------------------------------ | ---------------------------------------------------------------- |
+|--------------------------------------------------|------------------------------------------------------------------|
 | réseau Docker `web`, externe                     | `deploy/*/docker-compose.yml`                                    |
 | `/srv/<service>/<env>/{.env,docker-compose.yml}` | `/srv/hook/staging`, `/srv/hook/prod`                            |
 | `name:` et `container_name: <svc>-<env>`         | `hook-staging`, `hook-prod`                                      |
 | image `ghcr.io/davincibot/<repo>:<branche>`      | `:staging`, `:main`, plus `:sha-<commit>` pour le retour arrière |
 | Caddy en conteneur, `caddy:2`                    | blocs ajoutés à `/srv/proxy/Caddyfile`                           |
 | Watchtower `--http-api-update --label-enable`    | label `com.centurylinklabs.watchtower.enable=true`               |
-| `DaVinciBot/shared-workflows@v6.1.0`             | `ci.yml`, `container.yml`, `deploy.yml`, `security-scan.yml`     |
+| `DaVinciBot/shared-workflows@v6.1.1`             | `ci.yml`, `container.yml`, `deploy.yml`, `security-scan.yml`     |
 
 Deux conséquences méritent d'être explicites.
 
@@ -242,19 +242,19 @@ bloquerait la publication. Elle y ajoute
 ### Autres choix d'implémentation
 
 | Choix                                             | Pourquoi                                                                                                    |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | `index.ts` = app + route, `server.ts` = démarrage | permet à Vitest d'instancier l'app sans ouvrir de port                                                      |
 | migration dans `DaVinciBot/Supabased`             | choix d'exploitation : toutes les migrations de l'association au même endroit                               |
 | étage `pnpm install --prod` dédié au `Dockerfile` | `pnpm deploy` suppose un workspace ; `--legacy` est en voie de retrait. C'est aussi ce que fait `auth`      |
 | `node:24.11.0-slim`, utilisateur `node`           | le runbook a besoin d'un shell pour le diagnostic ; c'est aussi la base du reste de la flotte               |
 | `deploy/staging/` et `deploy/prod/`               | la flotte range un compose par environnement sous `/srv/<service>/<env>/`                                   |
-| `DaVinciBot/shared-workflows@v6.1.0`              | le déclenchement Watchtower, les tags et la sonde y sont déjà encodés ; les réécrire garantissait la dérive |
+| `DaVinciBot/shared-workflows@v6.1.1`              | le déclenchement Watchtower, les tags et la sonde y sont déjà encodés ; les réécrire garantissait la dérive |
 | schéma Supabase fixé à `helloasso`                | le rendre configurable serait une flexibilité factice, incompatible avec le typage du client Supabase       |
 
 ## Dépendances externes
 
 | Service         | Rôle                       | Panne = ?                               |
-| --------------- | -------------------------- | --------------------------------------- |
+|-----------------|----------------------------|-----------------------------------------|
 | API HelloAsso   | réconciliation du paiement | 503, rejeu                              |
 | API Notion      | recherche et écriture      | 503, rejeu                              |
 | Supabase        | idempotence                | 503, rejeu — sans elle, aucune garantie |
