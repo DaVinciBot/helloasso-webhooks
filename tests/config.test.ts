@@ -32,7 +32,7 @@ describe('loadConfig', () => {
 		expect(config.alertWebhookUrl).toBeUndefined();
 	});
 
-	it('liste toutes les variables manquantes d’un coup', () => {
+	it("liste toutes les variables manquantes d'un coup", () => {
 		let message = '';
 		try {
 			loadConfig({});
@@ -50,7 +50,7 @@ describe('loadConfig', () => {
 		expect(() => loadConfig(validEnv({ WEBHOOK_SECRET: 'trop-court' }))).toThrow(ConfigError);
 	});
 
-	it('refuse une URL Supabase qui n’en est pas une', () => {
+	it("refuse une URL Supabase qui n'en est pas une", () => {
 		expect(() => loadConfig(validEnv({ SUPABASE_URL: 'project.supabase.co' }))).toThrow(
 			ConfigError
 		);
@@ -71,7 +71,7 @@ describe('loadConfig', () => {
 		expect(config.helloasso.acceptedStates).toEqual(['Authorized', 'Registered']);
 	});
 
-	it('retire la barre oblique finale de l’URL d’API', () => {
+	it("retire la barre oblique finale de l'URL d'API", () => {
 		const config = loadConfig(
 			validEnv({ HELLOASSO_API_BASE: 'https://api.helloasso-sandbox.com/v5/' })
 		);
@@ -90,13 +90,13 @@ describe('loadConfig', () => {
 		expect(config.notion.emailPropertyType).toBe('rich_text');
 	});
 
-	it('refuse une version d’API antérieure aux sources de données', () => {
+	it("refuse une version d'API antérieure aux sources de données", () => {
 		// 2022-06-28 ne connaît que `databases.query` : chaque recherche
 		// échouerait au premier paiement plutôt qu'au démarrage.
 		expect(() => loadConfig(validEnv({ NOTION_VERSION: '2022-06-28' }))).toThrow(ConfigError);
 	});
 
-	it('accepte une version d’API postérieure', () => {
+	it("accepte une version d'API postérieure", () => {
 		const config = loadConfig(validEnv({ NOTION_VERSION: '2026-03-11' }));
 		expect(config.notion.version).toBe('2026-03-11');
 	});

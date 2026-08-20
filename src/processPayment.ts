@@ -201,7 +201,7 @@ async function handlePayment(
 			fields: {
 				paiement: paymentId,
 				email,
-				action: 'vérifier l’adresse du membre dans la base Notion'
+				action: "vérifier l'adresse du membre dans la base Notion"
 			}
 		});
 		return { status: 'unmatched', paymentId, email };

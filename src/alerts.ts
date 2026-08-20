@@ -75,7 +75,7 @@ export function createAlerter(webhookUrl: string | undefined, deps: AlerterDeps)
 				});
 
 				if (!response.ok) {
-					logger.error({ status: response.status, alert: alert.title }, 'envoi de l’alerte refusé');
+					logger.error({ status: response.status, alert: alert.title }, "envoi de l'alerte refusé");
 					return;
 				}
 
@@ -83,7 +83,7 @@ export function createAlerter(webhookUrl: string | undefined, deps: AlerterDeps)
 			} catch (error) {
 				logger.error(
 					{ err: describeError(error), alert: alert.title },
-					'envoi de l’alerte en échec'
+					"envoi de l'alerte en échec"
 				);
 			}
 		}

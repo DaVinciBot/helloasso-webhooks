@@ -66,7 +66,7 @@ describe('mapNotionError', () => {
 		}
 	});
 
-	it('classe l’autorisation en passager pour ne pas perdre le paiement', () => {
+	it("classe l'autorisation en passager pour ne pas perdre le paiement", () => {
 		// Un jeton révoqué se répare côté humain ; en attendant, mieux vaut faire
 		// rejouer HelloAsso que d'accuser réception d'un paiement non traité.
 		expect(mapNotionError(apiError('unauthorized'), 'test')).toBeInstanceOf(TransientError);
@@ -113,7 +113,7 @@ describe('createNotionClient', () => {
 		});
 	});
 
-	it('suit la pagination jusqu’au bout', async () => {
+	it("suit la pagination jusqu'au bout", async () => {
 		const api = notionApi([
 			{ results: [{ id: 'page-1' }], next_cursor: 'curseur-1' },
 			{ results: [{ id: 'page-2' }], next_cursor: null }
@@ -165,7 +165,7 @@ describe('createNotionClient', () => {
 		});
 	});
 
-	it('n’émet aucun appel si le budget de temps est déjà épuisé', async () => {
+	it("n'émet aucun appel si le budget de temps est déjà épuisé", async () => {
 		const api = notionApi([]);
 		const port = createNotionClient(notionConfig, {
 			logger: silentLogger,

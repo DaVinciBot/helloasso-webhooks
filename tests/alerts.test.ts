@@ -41,7 +41,7 @@ describe('formatAlert', () => {
 });
 
 describe('createAlerter', () => {
-	it('n’émet aucun appel quand aucune URL n’est configurée', async () => {
+	it("n'émet aucun appel quand aucune URL n'est configurée", async () => {
 		const fetchMock = vi.fn();
 		await alerter(undefined, fetchMock).notify(alert);
 

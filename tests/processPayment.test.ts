@@ -38,7 +38,7 @@ describe('matchesCampaign', () => {
 		expect(matchesCampaign({ organizationSlug: 'davincibot' }, campaign)).toEqual({ ok: true });
 	});
 
-	it('écarte un paiement d’une autre organisation', () => {
+	it("écarte un paiement d'une autre organisation", () => {
 		const result = matchesCampaign({ organizationSlug: 'autre-asso' }, campaign);
 		expect(result.ok).toBe(false);
 	});
@@ -47,7 +47,7 @@ describe('matchesCampaign', () => {
 		expect(matchesCampaign({ organizationSlug: 'DaVinciBot' }, campaign)).toEqual({ ok: true });
 	});
 
-	it('n’écarte pas quand l’information est absente', () => {
+	it("n'écarte pas quand l'information est absente", () => {
 		// Permissif sur l'absence : un champ retiré par HelloAsso ne doit pas
 		// couper le service en silence.
 		expect(matchesCampaign(undefined, campaign)).toEqual({ ok: true });
@@ -86,7 +86,7 @@ describe('isAcceptedState', () => {
 });
 
 describe('processWebhook', () => {
-	it('ignore un payload qui n’a pas la forme d’une notification', async () => {
+	it("ignore un payload qui n'a pas la forme d'une notification", async () => {
 		const doubles = makePorts();
 		const outcome = await processWebhook({ nimporte: 'quoi' }, makeDeps(doubles));
 
@@ -117,7 +117,7 @@ describe('processWebhook', () => {
 		expect(doubles.getPayment).not.toHaveBeenCalled();
 	});
 
-	it('n’écrit pas si le statut réconcilié n’est pas éligible', async () => {
+	it("n'écrit pas si le statut réconcilié n'est pas éligible", async () => {
 		// Le payload annonce « Authorized », HelloAsso dit « Refused » :
 		// c'est la réconciliation qui fait foi.
 		const doubles = makePorts({ payment: makePayment({ state: 'Refused' }) });
@@ -132,7 +132,7 @@ describe('processWebhook', () => {
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
 	});
 
-	it('écarte après réconciliation un paiement d’une autre campagne', async () => {
+	it("écarte après réconciliation un paiement d'une autre campagne", async () => {
 		const doubles = makePorts({
 			payment: makePayment({
 				order: { organizationSlug: 'davincibot', formSlug: 'don-libre' }
@@ -147,7 +147,7 @@ describe('processWebhook', () => {
 		expect(doubles.markPaid).not.toHaveBeenCalled();
 	});
 
-	it('alerte et n’enregistre rien quand aucune ligne Notion ne correspond', async () => {
+	it("alerte et n'enregistre rien quand aucune ligne Notion ne correspond", async () => {
 		const doubles = makePorts({ notionPages: [] });
 		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
 
@@ -194,7 +194,7 @@ describe('processWebhook', () => {
 		expect(doubles.notify).toHaveBeenCalledTimes(1);
 	});
 
-	it('laisse remonter une panne passagère pour que l’appelant réponde 5xx', async () => {
+	it("laisse remonter une panne passagère pour que l'appelant réponde 5xx", async () => {
 		const doubles = makePorts();
 		doubles.markPaid.mockRejectedValueOnce(new TransientError('Notion indisponible'));
 
@@ -204,7 +204,7 @@ describe('processWebhook', () => {
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
 	});
 
-	it('marque le paiement seulement après l’écriture Notion', async () => {
+	it("marque le paiement seulement après l'écriture Notion", async () => {
 		const order: string[] = [];
 		const doubles = makePorts();
 		doubles.markPaid.mockImplementation(() => {

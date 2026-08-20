@@ -92,7 +92,7 @@ describe('createHelloAssoClient', () => {
 		expect(calls.filter((url) => url === config.tokenUrl)).toHaveLength(2);
 	});
 
-	it('ne demande qu’un seul jeton pour des appels concurrents', async () => {
+	it("ne demande qu'un seul jeton pour des appels concurrents", async () => {
 		const { port, calls } = client([
 			jsonResponse(tokenBody),
 			jsonResponse(paymentBody),

@@ -49,7 +49,7 @@ const envSchema = z.object({
 	// Seule barrière d'authentification du webhook : les comptes association
 	// HelloAsso ne signent pas leurs notifications (pas de HMAC). On impose donc
 	// une longueur qui rend l'URL non devinable.
-	WEBHOOK_SECRET: z.string().min(24, 'doit faire au moins 24 caractères (secret dans l’URL)'),
+	WEBHOOK_SECRET: z.string().min(24, "doit faire au moins 24 caractères (secret dans l'URL)"),
 
 	HELLOASSO_CLIENT_ID: z.string().min(1),
 	HELLOASSO_CLIENT_SECRET: z.string().min(1),
@@ -66,7 +66,7 @@ const envSchema = z.object({
 		.string()
 		.min(1)
 		.refine((value) => value >= MIN_NOTION_VERSION, {
-			message: `doit valoir au moins ${MIN_NOTION_VERSION} : les sources de données n’existent pas avant`
+			message: `doit valoir au moins ${MIN_NOTION_VERSION} : les sources de données n'existent pas avant`
 		})
 		.default(MIN_NOTION_VERSION),
 	NOTION_EMAIL_PROPERTY: z.string().min(1),

@@ -37,7 +37,7 @@ describe('createDedupStore', () => {
 		expect(await store.isProcessed('12345')).toBe(true);
 	});
 
-	it('enregistre l’email en base, ou NULL s’il est absent', async () => {
+	it("enregistre l'email en base, ou NULL s'il est absent", async () => {
 		const { store, insert } = fakeApi();
 
 		await store.markProcessed('12345', 'a@b.fr');
@@ -66,7 +66,7 @@ describe('createDedupStore', () => {
 		await expect(store.markProcessed('12345', 'a@b.fr')).rejects.toThrow(TransientError);
 	});
 
-	it('reporte le code d’erreur dans le message, pour le diagnostic', async () => {
+	it("reporte le code d'erreur dans le message, pour le diagnostic", async () => {
 		const { store, find } = fakeApi();
 		find.mockResolvedValueOnce({
 			found: false,

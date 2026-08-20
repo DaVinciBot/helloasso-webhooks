@@ -27,7 +27,7 @@ describe('helloAssoWebhookSchema', () => {
 		expect(result.success).toBe(true);
 	});
 
-	it('refuse une enveloppe sans type d’évènement', () => {
+	it("refuse une enveloppe sans type d'évènement", () => {
 		expect(helloAssoWebhookSchema.safeParse({ data: {} }).success).toBe(false);
 		expect(helloAssoWebhookSchema.safeParse({ eventType: '', data: {} }).success).toBe(false);
 	});

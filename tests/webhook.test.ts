@@ -81,7 +81,7 @@ describe('POST /webhook/:secret', () => {
 		expect(context.isProcessed).not.toHaveBeenCalled();
 	});
 
-	it('répond 400 sur un corps qui n’est pas du JSON', async () => {
+	it("répond 400 sur un corps qui n'est pas du JSON", async () => {
 		const response = await post(context.app, 'ceci-n-est-pas-du-json');
 
 		expect(response.status).toBe(400);
@@ -99,7 +99,7 @@ describe('POST /webhook/:secret', () => {
 		expect(context.getPayment).not.toHaveBeenCalled();
 	});
 
-	it('ignore un évènement qui n’est pas un paiement', async () => {
+	it("ignore un évènement qui n'est pas un paiement", async () => {
 		const body = clone();
 		body.eventType = 'Form';
 
@@ -132,7 +132,7 @@ describe('POST /webhook/:secret', () => {
 		expect(context.markProcessed).not.toHaveBeenCalled();
 	});
 
-	it('répond 503 sur une erreur non typée plutôt que d’avaler le paiement', async () => {
+	it("répond 503 sur une erreur non typée plutôt que d'avaler le paiement", async () => {
 		context.findPagesByEmail.mockRejectedValueOnce(new Error('boum'));
 
 		const response = await post(context.app, clone());
