@@ -19,7 +19,7 @@ auprès de l'API HelloAsso avant d'agir.
 ## Documentation
 
 | Document                                                   | Contenu                                                               |
-| ---------------------------------------------------------- | --------------------------------------------------------------------- |
+|------------------------------------------------------------|-----------------------------------------------------------------------|
 | [`docs/architecture.md`](docs/architecture.md)             | Décisions de conception, sémantique de rejeu, budget de temps         |
 | [`docs/runbook-production.md`](docs/runbook-production.md) | Mise en production, étape par étape, de zéro à la première cotisation |
 | [`docs/operations.md`](docs/operations.md)                 | Incidents courants, rejeu manuel, rotation des secrets                |
@@ -61,7 +61,7 @@ curl -X POST "http://localhost:3000/webhook/$WEBHOOK_SECRET" \
 ### Commandes
 
 | Commande          | Effet                                        |
-| ----------------- | -------------------------------------------- |
+|-------------------|----------------------------------------------|
 | `pnpm dev`        | serveur en rechargement à chaud              |
 | `pnpm dev:pretty` | idem, logs mis en forme par `pino-pretty`    |
 | `pnpm build`      | compilation TypeScript vers `dist/`          |
@@ -119,7 +119,7 @@ applications : réseau `web`,
 `/srv/<service>/<env>/`, image taguée par la branche, Watchtower déclenché par CI via son API HTTP.
 
 | Environnement | Hôte                         | Conteneur      | Branche   | Déploiement             |
-| ------------- | ---------------------------- | -------------- | --------- | ----------------------- |
+|---------------|------------------------------|----------------|-----------|-------------------------|
 | staging       | `hook.staging.davincibot.fr` | `hook-staging` | `staging` | automatique             |
 | prod          | `hook.davincibot.fr`         | `hook-prod`    | `main`    | manuel, sur approbation |
 
@@ -130,7 +130,7 @@ d'argent.
 - [`deploy/prod/`](deploy/prod/docker-compose.yml) et [`deploy/staging/`](deploy/staging/docker-compose.yml) — à copier
   dans `/srv/hook/<env>/`
 - [`deploy/Caddyfile.snippet`](deploy/Caddyfile.snippet) — blocs à ajouter à `/srv/proxy/Caddyfile`
-- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v6.1.1`
+- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v6.1.2`
 
 La marche à suivre complète est dans
 [`docs/runbook-production.md`](docs/runbook-production.md).
