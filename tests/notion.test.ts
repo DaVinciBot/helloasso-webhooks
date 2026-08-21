@@ -167,7 +167,7 @@ describe('createNotionClient', () => {
 
 	it('interrompt une pagination qui ne finit pas', async () => {
 		// Un curseur toujours renseigné signale une base mal configurée : on
-		// s'arrête plutôt que de cocher la base entière.
+		// s'arrête plutôt que de marquer la base entière.
 		const { api, port } = client(
 			Array.from({ length: 20 }, (_, index) => ({
 				results: [row(`page-${String(index)}`, { email: 'a@b.fr' })],
@@ -292,14 +292,14 @@ describe('createNotionClient', () => {
 		expect(api.query).not.toHaveBeenCalled();
 	});
 
-	it('coche la propriété configurée', async () => {
+	it("pose l'état configuré sur la propriété configurée", async () => {
 		const { api, port } = client([]);
 
 		await port.markPaid('page-1', signal);
 
 		expect(api.update).toHaveBeenCalledWith({
 			page_id: 'page-1',
-			properties: { 'Cotisation payée': { checkbox: true } }
+			properties: { Cotisation: { status: { name: 'Payé' } } }
 		});
 	});
 

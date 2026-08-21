@@ -170,7 +170,7 @@ describe('processWebhook', () => {
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
 	});
 
-	it('coche toutes les lignes quand plusieurs partagent le même email', async () => {
+	it('marque toutes les lignes quand plusieurs partagent le même email', async () => {
 		const doubles = makePorts({ notionPages: ['page-1', 'page-2'] });
 		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
 

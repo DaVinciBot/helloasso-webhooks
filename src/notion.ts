@@ -11,7 +11,7 @@ import type { Logger } from './logger.js';
 import { normalizeEmail, normalizeName } from './schema.js';
 
 /**
- * Accès Notion : recherche de la ligne du membre, puis coche la case
+ * Accès Notion : recherche de la ligne du membre, puis pose l'état
  * « cotisation payée ».
  *
  * Le SDK officiel n'expose pas d'`AbortSignal`. Le budget de temps est donc tenu
@@ -40,7 +40,7 @@ export interface NotionPort {
 	 * aucun critère n'apparie.
 	 */
 	findPages(query: MemberQuery, options: { signal: AbortSignal }): Promise<NotionMatch | undefined>;
-	/** Coche la propriété booléenne de cotisation sur la page. Idempotent. */
+	/** Pose l'état de cotisation configuré sur la page. Idempotent. */
 	markPaid(pageId: string, options: { signal: AbortSignal }): Promise<void>;
 }
 
@@ -102,7 +102,7 @@ export interface NotionApi {
 	pages: {
 		update(args: {
 			page_id: string;
-			properties: Record<string, { checkbox: boolean }>;
+			properties: Record<string, { status: { name: string } }>;
 		}): Promise<unknown>;
 	};
 }
@@ -212,7 +212,7 @@ export interface NotionClientDeps {
 /**
  * Un membre ne devrait matcher qu'une poignée de lignes. Au-delà, on refuse de
  * parcourir la base entière : c'est le signe que la propriété configurée n'est
- * pas la bonne, et 500 lignes cochées par erreur sont pénibles à défaire.
+ * pas la bonne, et 500 lignes marquées par erreur sont pénibles à défaire.
  */
 const MAX_QUERY_PAGES = 5;
 const PAGE_SIZE = 100;
@@ -358,7 +358,7 @@ export function createNotionClient(config: NotionConfig, deps: NotionClientDeps)
 				await client.pages.update({
 					page_id: pageId,
 					properties: {
-						[config.paidProperty]: { checkbox: true }
+						[config.paidProperty]: { status: { name: config.paidStatus } }
 					}
 				});
 			} catch (error) {

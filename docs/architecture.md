@@ -36,7 +36,7 @@ POST /webhook/:secret
   ├─ 5. Notion : filtre email equals
   │     puis, si 0 ligne, balayage : email, sinon
   │     prénom + nom, comparés normalisés ───────── 0 → 200 unmatched + alerte
-  ├─ 6. Notion : PATCH checkbox = true   (× n lignes)
+  ├─ 6. Notion : PATCH status = NOTION_PAID_STATUS   (× n lignes)
   ├─ 7. INSERT processed_payments ON CONFLICT DO NOTHING
   └─────────────────────────────────────────────────── → 200 updated
 ```
@@ -98,7 +98,7 @@ ne dépend d'une donnée non réconciliée.
 
 Le paiement est marqué comme traité **après** l'écriture dans Notion.
 
-- Crash entre les deux → le rejeu recoche une case déjà cochée, opération idempotente et donc sans effet.
+- Crash entre les deux → le rejeu repose un état déjà posé, opération idempotente et donc sans effet.
 - L'ordre inverse perdrait l'écriture Notion pour de bon.
 
 Le premier risque est bénin, le second ne l'est pas.

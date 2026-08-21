@@ -1,6 +1,6 @@
 # Runbook — mise en production
 
-De zéro à la première cotisation cochée automatiquement, sur le VPS
+De zéro à la première cotisation marquée payée automatiquement, sur le VPS
 `davincibot.fr` et selon les conventions de la flotte : réseau Docker `web`, Caddy en conteneur,
 `/srv/<service>/<env>/`, Watchtower déclenché par CI.
 
@@ -65,9 +65,11 @@ data source ID**.
 → `NOTION_EMAIL_PROPERTY` = `<À_REMPLIR>`
 → `NOTION_EMAIL_PROPERTY_TYPE` = `email` \| `rich_text` \| `title`
 
-**1.5** Vérifie qu'une propriété **Checkbox** existe pour la cotisation. Crée-la sinon.
+**1.5** Vérifie qu'une propriété **Status** existe pour la cotisation, et relève le libellé exact de l'option à poser
+quand elle est payée — accents et majuscules compris, elle est transmise telle quelle.
 
 → `NOTION_PAID_PROPERTY` = `<À_REMPLIR>`
+→ `NOTION_PAID_STATUS` = `Payé`
 
 **1.5 bis — facultatif.** Relève les noms exacts des colonnes **prénom** et **nom**. Elles servent de repli quand aucune
 ligne ne porte l'adresse du payeur ; leur type n'a pas à être déclaré. Les deux ou aucune : n'en renseigner qu'une est
@@ -151,7 +153,7 @@ supabase db push
 `helloasso` → **Save**.
 
 > Sans elle, chaque requête du service reçoit un 404, il classe la panne comme
-> passagère et répond 503 en boucle. Aucune cotisation ne sera cochée.
+> passagère et répond 503 en boucle. Aucune cotisation ne sera marquée.
 
 **3.4** Vérifie depuis le SQL Editor :
 
@@ -177,7 +179,7 @@ SELECT *
 
 ## 4 — Discord : le canal d'alerte
 
-Quand un membre paie et qu'aucune ligne Notion ne porte son adresse, le service n'a rien à cocher. Ce n'est pas une
+Quand un membre paie et qu'aucune ligne Notion ne porte son adresse, le service n'a rien à marquer. Ce n'est pas une
 panne, c'est une donnée à corriger.
 
 Serveur Discord → canal (`#tresorerie-alertes`) → **Modifier le canal** → **Intégrations** → **Créer un webhook** →
@@ -413,11 +415,11 @@ Cinq lignes portant le même `paymentId`, dans l'ordre :
 notification reçue
 paiement réconcilié auprès de HelloAsso
 lignes Notion appariées
-cotisation cochée
+cotisation marquée payée
 paiement traité
 ```
 
-**12.3** La case est cochée dans Notion.
+**12.3** L'état est posé dans Notion.
 
 **12.4** La trace d'idempotence existe :
 
@@ -450,7 +452,7 @@ curl -X POST "https://hook.staging.davincibot.fr/webhook/<secret staging>" \
 - [ ] L'environnement GitHub `prod` exige une approbation.
 - [ ] Le canal Discord d'alerte est surveillé par quelqu'un de la trésorerie.
 - [ ] Un push sur `staging` déploie bien tout seul (le vérifier une fois).
-- [ ] Lire [`operations.md`](operations.md) — au moins « un membre a payé mais rien n'est coché ».
+- [ ] Lire [`operations.md`](operations.md) — au moins « un membre a payé, mais son état n'a pas changé ».
 
 ---
 

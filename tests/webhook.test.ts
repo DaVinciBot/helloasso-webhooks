@@ -57,7 +57,7 @@ describe('POST /webhook/:secret', () => {
 		context = buildApp();
 	});
 
-	it('traite la notification de la fixture : réconcilie, coche, mémorise', async () => {
+	it('traite la notification de la fixture : réconcilie, marque, mémorise', async () => {
 		const response = await post(context.app, clone());
 
 		expect(response.status).toBe(200);

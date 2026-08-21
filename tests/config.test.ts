@@ -11,7 +11,8 @@ function validEnv(overrides: Record<string, string | undefined> = {}): NodeJS.Pr
 		NOTION_TOKEN: 'ntn_xxx',
 		NOTION_DATA_SOURCE_ID: 'abcdef',
 		NOTION_EMAIL_PROPERTY: 'Email',
-		NOTION_PAID_PROPERTY: 'Cotisation payée',
+		NOTION_PAID_PROPERTY: 'Cotisation',
+		NOTION_PAID_STATUS: 'Payé',
 		SUPABASE_URL: 'https://project.supabase.co',
 		SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
 		...overrides
@@ -106,7 +107,7 @@ describe('loadConfig', () => {
 	});
 
 	it("refuse une seule des deux colonnes d'identité", () => {
-		// Apparier sur un demi-critère cocherait la mauvaise ligne ; le désactiver
+		// Apparier sur un demi-critère marquerait la mauvaise ligne ; le désactiver
 		// en silence donnerait un service qui ne fait pas ce qu'on croit.
 		expect(() => loadConfig(validEnv({ NOTION_FIRST_NAME_PROPERTY: 'Prénom' }))).toThrow(
 			ConfigError
@@ -137,6 +138,7 @@ describe('describeConfig', () => {
 		expect(serialized).not.toContain('secret-de-test-suffisamment-long');
 		// …tout en restant utile au diagnostic.
 		expect(serialized).toContain('davincibot');
-		expect(serialized).toContain('Cotisation payée');
+		expect(serialized).toContain('Cotisation');
+		expect(serialized).toContain('Payé');
 	});
 });

@@ -126,11 +126,11 @@ secondes :
 notification reçue                          paymentId=…
 paiement réconcilié auprès de HelloAsso     state=Authorized
 lignes Notion appariées                     matches=1
-cotisation cochée                           pageId=…
+cotisation marquée payée                    pageId=…
 paiement traité
 ```
 
-Puis, dans Notion, la case est cochée.
+Puis, dans Notion, l'état est posé.
 
 ## 6 — Les cas à vérifier aussi
 
@@ -185,7 +185,7 @@ Une fois les essais terminés :
 
 1. Retire l'URL de notification du bac à sable (le tunnel n'existera plus).
 2. Rebascule `HELLOASSO_API_BASE` et `HELLOASSO_TOKEN_URL` sur la production.
-3. Si tu as visé la base de production, décoche les lignes de test et purge les
+3. Si tu as visé la base de production, remets l'état d'origine sur les lignes de test et purge les
    traces :
 
 ```sql

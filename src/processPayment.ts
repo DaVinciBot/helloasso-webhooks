@@ -45,7 +45,7 @@ export type ProcessOutcome =
 			readonly paymentId: string | undefined;
 			readonly reason: string;
 	  }
-	/** Cas nominal : au moins une ligne cochée. */
+	/** Cas nominal : au moins une ligne marquée payée. */
 	| {
 			readonly status: 'updated';
 			readonly paymentId: string;
@@ -224,7 +224,7 @@ async function handlePayment(
 	if (pageIds.length > 1) {
 		logger.warn(
 			{ email, matchedBy, matches: pageIds.length },
-			'plusieurs lignes Notion pour ce membre, toutes seront cochées'
+			'plusieurs lignes Notion pour ce membre, toutes seront marquées'
 		);
 	}
 
@@ -232,11 +232,11 @@ async function handlePayment(
 
 	for (const pageId of pageIds) {
 		await deps.notion.markPaid(pageId, { signal: deps.signal });
-		logger.info({ pageId }, 'cotisation cochée');
+		logger.info({ pageId }, 'cotisation marquée payée');
 	}
 
 	// Marquage en dernier : si le process meurt entre l'écriture Notion et ce
-	// point, le rejeu recochera une case déjà cochée — opération sans effet —
+	// point, le rejeu reposera un état déjà posé — opération sans effet —
 	// puis marquera. L'ordre inverse risquerait au contraire de perdre l'écriture.
 	await deps.dedup.markProcessed(paymentId, email);
 

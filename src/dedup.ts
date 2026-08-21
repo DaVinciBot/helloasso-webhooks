@@ -6,7 +6,7 @@ import type { Logger } from './logger.js';
 /**
  * Idempotence : mémorise les paiements déjà traités pour que les rejeux
  * HelloAsso — et ils arrivent, c'est le mécanisme de fiabilité de leur webhook —
- * ne recochent pas et ne réécrivent pas.
+ * ne remarquent pas et ne réécrivent pas.
  *
  * La table vit dans le schéma dédié `helloasso` du projet Supabase, hors de
  * `public`, pour ne pas entrer dans `@davincibot/database-types` : aucune app du

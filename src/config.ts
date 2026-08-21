@@ -72,6 +72,7 @@ const envSchema = z.object({
 	NOTION_EMAIL_PROPERTY: z.string().min(1),
 	NOTION_EMAIL_PROPERTY_TYPE: z.enum(emailPropertyTypes).default('email'),
 	NOTION_PAID_PROPERTY: z.string().min(1),
+	NOTION_PAID_STATUS: z.string().min(1),
 
 	NOTION_FIRST_NAME_PROPERTY: z.string().min(1).optional(),
 	NOTION_LAST_NAME_PROPERTY: z.string().min(1).optional(),
@@ -98,7 +99,7 @@ export interface HelloAssoConfig {
 
 /**
  * Colonnes d'identité du repli. Les deux ensemble ou aucune : apparier sur le
- * seul nom de famille cocherait la mauvaise ligne dans une fratrie.
+ * seul nom de famille marquerait la mauvaise ligne dans une fratrie.
  */
 export interface NameProperties {
 	readonly firstName: string;
@@ -112,6 +113,8 @@ export interface NotionConfig {
 	readonly emailProperty: string;
 	readonly emailPropertyType: EmailPropertyType;
 	readonly paidProperty: string;
+	/** Option de l'état, à l'identique du libellé Notion. */
+	readonly paidStatus: string;
 	readonly nameProperties: NameProperties | undefined;
 }
 
@@ -232,6 +235,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
 			emailProperty: env.NOTION_EMAIL_PROPERTY,
 			emailPropertyType: env.NOTION_EMAIL_PROPERTY_TYPE,
 			paidProperty: env.NOTION_PAID_PROPERTY,
+			paidStatus: env.NOTION_PAID_STATUS,
 			nameProperties
 		},
 		supabase: {
@@ -262,6 +266,7 @@ export function describeConfig(config: Config): Record<string, unknown> {
 			emailProperty: config.notion.emailProperty,
 			emailPropertyType: config.notion.emailPropertyType,
 			paidProperty: config.notion.paidProperty,
+			paidStatus: config.notion.paidStatus,
 			repliParIdentite:
 				config.notion.nameProperties === undefined
 					? 'désactivé'

@@ -39,12 +39,12 @@ sudo docker compose logs --since 24h | grep '"paymentId":"12345"'
 | `paiement déjà traité, aucune écriture`   | rejeu — comportement normal, rien à faire                    |
 | `paiement réconcilié auprès de HelloAsso` | l'API v5 a confirmé le paiement                              |
 | `lignes Notion appariées`                 | au moins une ligne correspond à l'email                      |
-| `cotisation cochée`                       | une page mise à jour                                         |
+| `cotisation marquée payée`                | une page mise à jour                                         |
 | `paiement traité`                         | fin nominale                                                 |
 | `évènement hors périmètre, ignoré`        | pas un `Payment` — normal, HelloAsso notifie plusieurs types |
 | `statut non éligible, aucune écriture`    | paiement non abouti (`Refused`, `Pending`…)                  |
 | `aucune ligne Notion pour cet email`      | **à traiter** — voir plus bas                                |
-| `plusieurs lignes Notion pour cet email`  | doublon dans la base — toutes ont été cochées                |
+| `plusieurs lignes Notion pour cet email`  | doublon dans la base — toutes ont été marquées               |
 | `panne passagère, rejeu attendu`          | 503 renvoyé, HelloAsso rejouera                              |
 | `secret de webhook invalide`              | 401 — sondage automatisé, ou secret mal recopié              |
 
@@ -52,7 +52,7 @@ sudo docker compose logs --since 24h | grep '"paymentId":"12345"'
 
 ## Incidents
 
-### Un membre a payé, mais rien n'est coché
+### Un membre a payé, mais son état n'a pas changé
 
 C'est l'incident le plus courant, et il n'est presque jamais technique.
 
@@ -108,20 +108,21 @@ Le filtre ne correspond pas au type réel de la propriété email. Vérifie dans
 `NOTION_EMAIL_PROPERTY_TYPE`
 (`email`, `rich_text` ou `title`), puis `sudo docker compose up -d`.
 
-Même symptôme si `NOTION_EMAIL_PROPERTY` ou `NOTION_PAID_PROPERTY` ne reprend pas **exactement** le nom affiché dans
+Même symptôme si `NOTION_EMAIL_PROPERTY`, `NOTION_PAID_PROPERTY` ou `NOTION_PAID_STATUS` ne reprend pas
+**exactement** le libellé affiché dans
 Notion — accents et espaces compris.
 
-### Plusieurs lignes cochées pour un seul paiement
+### Plusieurs lignes marquées pour un seul paiement
 
 Comportement voulu : plusieurs lignes portent le même email — ou, en repli, le même prénom et le même nom. Le service
-les coche toutes et journalise un `warn`
+les marque toutes et journalise un `warn`
 portant `matchedBy`. Dédoublonne la base Notion à l'occasion.
 
-### La ligne cochée n'est pas celle du payeur
+### La ligne marquée n'est pas celle du payeur
 
 Regarde `matchedBy` dans les logs. `identité` : aucune ligne ne portait l'adresse du payeur, l'appariement s'est fait
 sur `NOTION_FIRST_NAME_PROPERTY`
-et `NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. Décoche la case, corrige l'email dans
+et `NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. Remets l'état d'origine, corrige l'email dans
 Notion, puis rejoue le paiement (section « Rejouer un paiement »). Laisser les deux variables vides désactive ce repli.
 
 ### Le conteneur ne redémarre pas après un déploiement
@@ -146,7 +147,7 @@ Le service étant idempotent, un rejeu est sûr : au pire il ne fait rien.
 **Si le paiement n'a jamais abouti** (`unmatched`, `data_error`, ou 503 définitif), il n'est pas dans
 `processed_payments` : il suffit de renvoyer la notification.
 
-**S'il a abouti et que tu veux vraiment le refaire** (case décochée par erreur), supprime d'abord la trace, sinon le
+**S'il a abouti et que tu veux vraiment le refaire** (état remis à zéro par erreur), supprime d'abord la trace, sinon le
 service répondra `already_handled` :
 
 ```sql

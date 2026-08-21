@@ -35,7 +35,8 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
 			version: '2025-09-03',
 			emailProperty: 'Email',
 			emailPropertyType: 'email',
-			paidProperty: 'Cotisation payée',
+			paidProperty: 'Cotisation',
+			paidStatus: 'Payé',
 			nameProperties: { firstName: 'Prénom', lastName: 'Nom' }
 		},
 		supabase: {
