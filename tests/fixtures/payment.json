@@ -3,7 +3,7 @@
 		"order": {
 			"id": 98765,
 			"date": "2026-08-17T10:12:03.000Z",
-			"formSlug": "adhesion-2026-2027",
+			"formSlug": "cotisations-dvb-25-26",
 			"formType": "Membership",
 			"organizationSlug": "davincibot"
 		},
@@ -23,7 +23,7 @@
 			}
 		],
 		"cashOutState": "Transfered",
-		"paymentReceiptUrl": "https://www.helloasso.com/associations/davincibot/adhesions/adhesion-2026-2027/paiement/12345",
+		"paymentReceiptUrl": "https://www.helloasso.com/associations/davincibot/adhesions/cotisations-dvb-25-26/paiement/12345",
 		"id": 12345,
 		"amount": 2000,
 		"date": "2026-08-17T10:12:05.000Z",

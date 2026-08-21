@@ -65,8 +65,8 @@ describe('POST /webhook/:secret', () => {
 
 		expect(context.getPayment).toHaveBeenCalledWith('12345', expect.anything());
 		// L'email de la fixture est en casse mixte : la normalisation doit avoir eu lieu.
-		expect(context.findPagesByEmail).toHaveBeenCalledWith(
-			'membre.test@example.org',
+		expect(context.findPages).toHaveBeenCalledWith(
+			{ email: 'membre.test@example.org', firstName: 'Membre', lastName: 'Test' },
 			expect.anything()
 		);
 		expect(context.markPaid).toHaveBeenCalledWith('page-1', expect.anything());
@@ -133,7 +133,7 @@ describe('POST /webhook/:secret', () => {
 	});
 
 	it("répond 503 sur une erreur non typée plutôt que d'avaler le paiement", async () => {
-		context.findPagesByEmail.mockRejectedValueOnce(new Error('boum'));
+		context.findPages.mockRejectedValueOnce(new Error('boum'));
 
 		const response = await post(context.app, clone());
 

@@ -32,8 +32,10 @@ POST /webhook/:secret
   ├─ 1. déjà dans processed_payments ? ───────────── ✓ → 200 already_handled
   ├─ 2. GET /v5/payments/{id} ← fait autorité
   ├─ 3. campagne + statut confirmés ? ────────────── ✗ → 200 ignored
-  ├─ 4. email du payeur normalisé ────────────────── ✗ → 200 data_error + alerte
-  ├─ 5. Notion : query filter email equals ───────── 0 → 200 unmatched + alerte
+  ├─ 4. email ou identité du payeur exploitable ? ── ✗ → 200 data_error + alerte
+  ├─ 5. Notion : filtre email equals
+  │     puis, si 0 ligne, balayage : email, sinon
+  │     prénom + nom, comparés normalisés ───────── 0 → 200 unmatched + alerte
   ├─ 6. Notion : PATCH checkbox = true   (× n lignes)
   ├─ 7. INSERT processed_payments ON CONFLICT DO NOTHING
   └─────────────────────────────────────────────────── → 200 updated
@@ -66,7 +68,7 @@ C'est la seule barrière disponible. Elle est traitée en conséquence :
 Le choix du code HTTP n'est pas cosmétique : il décide si HelloAsso rejoue.
 
 | Classe           | Réponse | Rejeu | Exemples                                             |
-|------------------|---------|-------|------------------------------------------------------|
+| ---------------- | ------- | ----- | ---------------------------------------------------- |
 | `TransientError` | 503     | oui   | réseau coupé, 5xx amont, quota, timeout, Supabase HS |
 | `DataError`      | 200     | non   | email inconnu de Notion, propriété inexistante       |
 | `ConfigError`    | —       | —     | jetée au démarrage, le process refuse de se lancer   |
@@ -211,7 +213,7 @@ dans une colonne texte, le type est une variable d'environnement plutôt qu'une 
 Le service se conforme aux conventions d'infrastructure de DaVinciBot plutôt que d'y faire exception.
 
 | Convention de la flotte                          | Application ici                                                  |
-|--------------------------------------------------|------------------------------------------------------------------|
+| ------------------------------------------------ | ---------------------------------------------------------------- |
 | réseau Docker `web`, externe                     | `deploy/*/docker-compose.yml`                                    |
 | `/srv/<service>/<env>/{.env,docker-compose.yml}` | `/srv/hook/staging`, `/srv/hook/prod`                            |
 | `name:` et `container_name: <svc>-<env>`         | `hook-staging`, `hook-prod`                                      |
@@ -242,7 +244,7 @@ bloquerait la publication. Elle y ajoute
 ### Autres choix d'implémentation
 
 | Choix                                             | Pourquoi                                                                                                    |
-|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `index.ts` = app + route, `server.ts` = démarrage | permet à Vitest d'instancier l'app sans ouvrir de port                                                      |
 | migration dans `DaVinciBot/Supabased`             | choix d'exploitation : toutes les migrations de l'association au même endroit                               |
 | étage `pnpm install --prod` dédié au `Dockerfile` | `pnpm deploy` suppose un workspace ; `--legacy` est en voie de retrait. C'est aussi ce que fait `auth`      |
@@ -254,7 +256,7 @@ bloquerait la publication. Elle y ajoute
 ## Dépendances externes
 
 | Service         | Rôle                       | Panne = ?                               |
-|-----------------|----------------------------|-----------------------------------------|
+| --------------- | -------------------------- | --------------------------------------- |
 | API HelloAsso   | réconciliation du paiement | 503, rejeu                              |
 | API Notion      | recherche et écriture      | 503, rejeu                              |
 | Supabase        | idempotence                | 503, rejeu — sans elle, aucune garantie |

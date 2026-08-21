@@ -1,11 +1,18 @@
-import { APIErrorCode, Client, ClientErrorCode, isNotionClientError } from '@notionhq/client';
+import {
+	APIErrorCode,
+	Client,
+	ClientErrorCode,
+	isNotionClientError,
+	type QueryDataSourceResponse
+} from '@notionhq/client';
 import type { EmailPropertyType, NotionConfig } from './config.js';
 import { DataError, TransientError } from './errors.js';
 import type { Logger } from './logger.js';
+import { normalizeEmail, normalizeName } from './schema.js';
 
 /**
- * Accès Notion : recherche des lignes par email, puis coche la case « cotisation
- * payée ».
+ * Accès Notion : recherche de la ligne du membre, puis coche la case
+ * « cotisation payée ».
  *
  * Le SDK officiel n'expose pas d'`AbortSignal`. Le budget de temps est donc tenu
  * par deux moyens : `timeoutMs` passé au client (borne chaque appel HTTP) et un
@@ -13,9 +20,26 @@ import type { Logger } from './logger.js';
  * `docs/architecture.md` § budget de temps.
  */
 
+/** Ce qu'on sait du payeur, par ordre de priorité d'appariement. */
+export interface MemberQuery {
+	/** Déjà normalisé par {@link normalizeEmail}. */
+	readonly email: string | undefined;
+	readonly firstName: string | undefined;
+	readonly lastName: string | undefined;
+}
+
+/** Lignes appariées, et sur quel critère — l'information intéresse les logs. */
+export interface NotionMatch {
+	readonly pageIds: string[];
+	readonly matchedBy: 'email' | 'identité';
+}
+
 export interface NotionPort {
-	/** Ids des pages dont la propriété email vaut `email`. Peut être vide. */
-	findPagesByEmail(email: string, options: { signal: AbortSignal }): Promise<string[]>;
+	/**
+	 * Lignes du membre : l'email d'abord, l'identité en repli. `undefined` si
+	 * aucun critère n'apparie.
+	 */
+	findPages(query: MemberQuery, options: { signal: AbortSignal }): Promise<NotionMatch | undefined>;
 	/** Coche la propriété booléenne de cotisation sur la page. Idempotent. */
 	markPaid(pageId: string, options: { signal: AbortSignal }): Promise<void>;
 }
@@ -47,6 +71,20 @@ export function buildEmailFilter(
 }
 
 /**
+ * Ligne telle que le SDK la rend. Annoter le paramètre plutôt que de laisser
+ * l'inférence le déduire : selon la façon dont l'éditeur résout les types du
+ * SDK, le callback part sinon en `any` implicite.
+ */
+type SdkRow = QueryDataSourceResponse['results'][number];
+
+/** Ligne de la source de données, réduite à ce que le service lit. */
+export interface NotionRow {
+	readonly id: string;
+	/** Absent des réponses partielles du SDK. */
+	readonly properties?: Record<string, unknown> | undefined;
+}
+
+/**
  * Surface Notion réellement utilisée par ce service — deux appels.
  *
  * L'exposer comme interface étroite plutôt que de dépendre du type `Client`
@@ -56,10 +94,10 @@ export interface NotionApi {
 	dataSources: {
 		query(args: {
 			data_source_id: string;
-			filter: EmailFilter;
+			filter?: EmailFilter;
 			page_size: number;
 			start_cursor?: string;
-		}): Promise<{ results: { id: string }[]; next_cursor: string | null }>;
+		}): Promise<{ results: NotionRow[]; next_cursor: string | null }>;
 	};
 	pages: {
 		update(args: {
@@ -75,13 +113,59 @@ export function toNotionApi(client: Client): NotionApi {
 		dataSources: {
 			query: async (args) => {
 				const response = await client.dataSources.query(args);
-				return { results: response.results, next_cursor: response.next_cursor };
+				return {
+					results: response.results.map((result: SdkRow) => ({
+						id: result.id,
+						properties:
+							'properties' in result
+								? (result.properties as unknown as Record<string, unknown>)
+								: undefined
+					})),
+					next_cursor: response.next_cursor
+				};
 			}
 		},
 		pages: {
 			update: (args) => client.pages.update(args)
 		}
 	};
+}
+
+/**
+ * Texte d'une valeur de propriété Notion, quel que soit son type.
+ *
+ * Le repli lit les colonnes plutôt que de les filtrer : il doit donc savoir
+ * extraire un `title`, un `rich_text` et un `email` sans que la configuration
+ * ait à déclarer lequel c'est. Toute autre forme rend une chaîne vide, qui
+ * n'apparie rien. Fonction pure.
+ */
+export function plainText(property: unknown): string {
+	if (property === null || typeof property !== 'object') {
+		return '';
+	}
+	const value = property as {
+		email?: unknown;
+		title?: unknown;
+		rich_text?: unknown;
+	};
+
+	if (typeof value.email === 'string') {
+		return value.email;
+	}
+
+	const richText = value.title ?? value.rich_text;
+	if (!Array.isArray(richText)) {
+		return '';
+	}
+	return richText
+		.map((piece: unknown) =>
+			piece !== null &&
+			typeof piece === 'object' &&
+			typeof (piece as { plain_text?: unknown }).plain_text === 'string'
+				? (piece as { plain_text: string }).plain_text
+				: ''
+		)
+		.join('');
 }
 
 /**
@@ -126,7 +210,7 @@ export interface NotionClientDeps {
 }
 
 /**
- * Un email ne devrait matcher qu'une poignée de lignes. Au-delà, on refuse de
+ * Un membre ne devrait matcher qu'une poignée de lignes. Au-delà, on refuse de
  * parcourir la base entière : c'est le signe que la propriété configurée n'est
  * pas la bonne, et 500 lignes cochées par erreur sont pénibles à défaire.
  */
@@ -145,45 +229,127 @@ export function createNotionClient(config: NotionConfig, deps: NotionClientDeps)
 			})
 		);
 
+	/** Parcours paginé, borné, d'une recherche — filtrée ou non. */
+	async function collect(
+		filter: EmailFilter | undefined,
+		context: string,
+		options: { signal: AbortSignal },
+		details: Record<string, unknown>
+	): Promise<NotionRow[]> {
+		const rows: NotionRow[] = [];
+		let cursor: string | undefined;
+		let visitedPages = 0;
+
+		do {
+			options.signal.throwIfAborted();
+			visitedPages += 1;
+
+			let response;
+			try {
+				response = await client.dataSources.query({
+					data_source_id: config.dataSourceId,
+					page_size: PAGE_SIZE,
+					...(cursor === undefined ? {} : { start_cursor: cursor }),
+					...(filter === undefined ? {} : { filter })
+				});
+			} catch (error) {
+				throw mapNotionError(error, context);
+			}
+
+			rows.push(...response.results);
+			cursor = response.next_cursor ?? undefined;
+
+			if (cursor !== undefined && visitedPages >= MAX_QUERY_PAGES) {
+				logger.warn(
+					{ ...details, found: rows.length, visitedPages },
+					`${context} : pagination interrompue`
+				);
+				break;
+			}
+		} while (cursor !== undefined);
+
+		return rows;
+	}
+
+	/**
+	 * Repli : un seul parcours de la source, comparaison côté service.
+	 *
+	 * Notion ne documente pas si ses filtres texte tiennent compte de la casse ;
+	 * bâtir l'appariement dessus laisserait passer un « Dupont » écrit
+	 * « DUPONT ». On lit donc les colonnes et on compare des formes normalisées.
+	 * Le même balayage sert les deux critères : l'email d'abord — il reste le
+	 * plus sûr — l'identité seulement pour les lignes qu'il n'a pas prises.
+	 */
+	async function scan(
+		query: MemberQuery,
+		options: { signal: AbortSignal }
+	): Promise<NotionMatch | undefined> {
+		const firstName = normalizeName(query.firstName);
+		const lastName = normalizeName(query.lastName);
+		const names = config.nameProperties;
+		const byIdentity =
+			names !== undefined && firstName !== undefined && lastName !== undefined ? names : undefined;
+
+		if (query.email === undefined && byIdentity === undefined) {
+			return undefined;
+		}
+
+		const rows = await collect(undefined, 'recherche par identité', options, {
+			email: query.email,
+			lastName
+		});
+
+		const emailMatches: string[] = [];
+		const identityMatches: string[] = [];
+
+		for (const row of rows) {
+			const properties = row.properties ?? {};
+
+			if (
+				query.email !== undefined &&
+				normalizeEmail(plainText(properties[config.emailProperty])) === query.email
+			) {
+				emailMatches.push(row.id);
+				continue;
+			}
+
+			if (
+				byIdentity !== undefined &&
+				normalizeName(plainText(properties[byIdentity.firstName])) === firstName &&
+				normalizeName(plainText(properties[byIdentity.lastName])) === lastName
+			) {
+				identityMatches.push(row.id);
+			}
+		}
+
+		if (emailMatches.length > 0) {
+			return { pageIds: emailMatches, matchedBy: 'email' };
+		}
+		return identityMatches.length > 0
+			? { pageIds: identityMatches, matchedBy: 'identité' }
+			: undefined;
+	}
+
 	return {
-		async findPagesByEmail(email, options): Promise<string[]> {
-			const filter = buildEmailFilter(config.emailProperty, config.emailPropertyType, email);
-			const pageIds: string[] = [];
-			let cursor: string | undefined;
-			let visitedPages = 0;
-
-			do {
-				options.signal.throwIfAborted();
-				visitedPages += 1;
-
-				let response;
-				try {
-					response = await client.dataSources.query({
-						data_source_id: config.dataSourceId,
-						page_size: PAGE_SIZE,
-						...(cursor === undefined ? {} : { start_cursor: cursor }),
-						filter
-					});
-				} catch (error) {
-					throw mapNotionError(error, 'recherche par email');
+		async findPages(query, options): Promise<NotionMatch | undefined> {
+			// Chemin rapide : un filtre côté Notion, une requête, aucun parcours.
+			// Il couvre le cas nominal — l'email est saisi à l'identique des deux
+			// côtés — et laisse le balayage aux seuls paiements qu'il ne trouve pas.
+			if (query.email !== undefined) {
+				const filter = buildEmailFilter(
+					config.emailProperty,
+					config.emailPropertyType,
+					query.email
+				);
+				const rows = await collect(filter, 'recherche par email', options, {
+					email: query.email
+				});
+				if (rows.length > 0) {
+					return { pageIds: rows.map((row) => row.id), matchedBy: 'email' };
 				}
+			}
 
-				for (const result of response.results) {
-					pageIds.push(result.id);
-				}
-
-				cursor = response.next_cursor ?? undefined;
-
-				if (cursor !== undefined && visitedPages >= MAX_QUERY_PAGES) {
-					logger.warn(
-						{ email, found: pageIds.length, visitedPages },
-						'trop de résultats pour un seul email, pagination interrompue'
-					);
-					break;
-				}
-			} while (cursor !== undefined);
-
-			return pageIds;
+			return await scan(query, options);
 		},
 
 		async markPaid(pageId, options): Promise<void> {

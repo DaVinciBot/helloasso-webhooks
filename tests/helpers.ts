@@ -1,11 +1,11 @@
 import { pino } from 'pino';
 import { vi } from 'vitest';
-import type { AlertPort } from '../src/alerts.js';
+import type { Alert, AlertPort } from '../src/alerts.js';
 import type { Config } from '../src/config.js';
 import type { DedupPort } from '../src/dedup.js';
 import type { HelloAssoPort } from '../src/helloasso.js';
 import type { Logger } from '../src/logger.js';
-import type { NotionPort } from '../src/notion.js';
+import type { NotionMatch, NotionPort } from '../src/notion.js';
 import type { HelloAssoPayment } from '../src/schema.js';
 
 /** Logger muet : les tests vérifient des comportements, pas des sorties de log. */
@@ -35,7 +35,8 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
 			version: '2025-09-03',
 			emailProperty: 'Email',
 			emailPropertyType: 'email',
-			paidProperty: 'Cotisation payée'
+			paidProperty: 'Cotisation payée',
+			nameProperties: { firstName: 'Prénom', lastName: 'Nom' }
 		},
 		supabase: {
 			url: 'https://project.supabase.co',
@@ -76,7 +77,9 @@ export interface FakePorts {
 export interface FakePortOptions {
 	payment?: HelloAssoPayment;
 	processedIds?: Set<string>;
+	/** Lignes rendues par la recherche Notion ; vide = aucun appariement. */
 	notionPages?: string[];
+	matchedBy?: NotionMatch['matchedBy'];
 }
 
 /**
@@ -91,21 +94,27 @@ export function makePorts(options: FakePortOptions = {}) {
 	const getPayment = vi.fn((): Promise<HelloAssoPayment> =>
 		Promise.resolve(options.payment ?? makePayment())
 	);
-	const findPagesByEmail = vi.fn((): Promise<string[]> => Promise.resolve([...pages]));
+	const findPages = vi.fn((): Promise<NotionMatch | undefined> =>
+		Promise.resolve(
+			pages.length === 0
+				? undefined
+				: { pageIds: [...pages], matchedBy: options.matchedBy ?? 'email' }
+		)
+	);
 	const markPaid = vi.fn((): Promise<void> => Promise.resolve());
 	const isProcessed = vi.fn((id: string): Promise<boolean> => Promise.resolve(processed.has(id)));
 	const markProcessed = vi.fn((id: string): Promise<void> => {
 		processed.add(id);
 		return Promise.resolve();
 	});
-	const notify = vi.fn((): Promise<void> => Promise.resolve());
+	const notify = vi.fn((_alert: Alert): Promise<void> => Promise.resolve());
 
 	const ports: FakePorts = {
 		helloasso: { getPayment },
-		notion: { findPagesByEmail, markPaid },
+		notion: { findPages, markPaid },
 		dedup: { isProcessed, markProcessed },
 		alerts: { notify }
 	};
 
-	return { ports, getPayment, findPagesByEmail, markPaid, isProcessed, markProcessed, notify };
+	return { ports, getPayment, findPages, markPaid, isProcessed, markProcessed, notify };
 }

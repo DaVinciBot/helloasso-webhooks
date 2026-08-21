@@ -74,3 +74,26 @@ export function normalizeEmail(email: string | undefined): string | undefined {
 	}
 	return normalized;
 }
+
+/**
+ * Normalisation d'un prénom ou d'un nom pour le matching Notion.
+ *
+ * Un membre saisit son nom chez HelloAsso, un autre humain l'a saisi dans
+ * Notion : la casse, les accents, les traits d'union et les apostrophes ne
+ * concordent qu'au hasard. On compare donc des formes réduites — « DUPONT »,
+ * « Dupont » et « du-pont » deviennent la même clé. Renvoie `undefined` si la
+ * valeur ne peut pas servir de critère.
+ */
+export function normalizeName(name: string | undefined): string | undefined {
+	if (name === undefined) {
+		return undefined;
+	}
+	const normalized = name
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/[\u2019'-]/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+	return normalized === '' ? undefined : normalized;
+}

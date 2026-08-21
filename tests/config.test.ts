@@ -90,6 +90,30 @@ describe('loadConfig', () => {
 		expect(config.notion.emailPropertyType).toBe('rich_text');
 	});
 
+	it("laisse le repli par identité désactivé quand aucune colonne n'est déclarée", () => {
+		expect(loadConfig(validEnv()).notion.nameProperties).toBeUndefined();
+	});
+
+	it("accepte les deux colonnes d'identité", () => {
+		const config = loadConfig(
+			validEnv({
+				NOTION_FIRST_NAME_PROPERTY: 'Prénom',
+				NOTION_LAST_NAME_PROPERTY: 'Nom'
+			})
+		);
+
+		expect(config.notion.nameProperties).toEqual({ firstName: 'Prénom', lastName: 'Nom' });
+	});
+
+	it("refuse une seule des deux colonnes d'identité", () => {
+		// Apparier sur un demi-critère cocherait la mauvaise ligne ; le désactiver
+		// en silence donnerait un service qui ne fait pas ce qu'on croit.
+		expect(() => loadConfig(validEnv({ NOTION_FIRST_NAME_PROPERTY: 'Prénom' }))).toThrow(
+			ConfigError
+		);
+		expect(() => loadConfig(validEnv({ NOTION_LAST_NAME_PROPERTY: 'Nom' }))).toThrow(ConfigError);
+	});
+
 	it("refuse une version d'API antérieure aux sources de données", () => {
 		// 2022-06-28 ne connaît que `databases.query` : chaque recherche
 		// échouerait au premier paiement plutôt qu'au démarrage.

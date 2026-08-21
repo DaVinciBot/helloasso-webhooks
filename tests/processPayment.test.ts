@@ -127,7 +127,7 @@ describe('processWebhook', () => {
 		);
 
 		expect(outcome).toEqual({ status: 'ignored', reason: 'statut_Refused' });
-		expect(doubles.findPagesByEmail).not.toHaveBeenCalled();
+		expect(doubles.findPages).not.toHaveBeenCalled();
 		expect(doubles.markPaid).not.toHaveBeenCalled();
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
 	});
@@ -157,6 +157,14 @@ describe('processWebhook', () => {
 			email: 'membre.test@example.org'
 		});
 		expect(doubles.notify).toHaveBeenCalledTimes(1);
+		expect(doubles.notify.mock.calls[0]?.[0]).toMatchObject({
+			fields: {
+				paiement: '12345',
+				email: 'membre.test@example.org',
+				prénom: 'Membre',
+				nom: 'Test'
+			}
+		});
 		// Non enregistré : si la ligne Notion est créée plus tard, un rejeu manuel
 		// doit pouvoir aboutir.
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
@@ -171,13 +179,40 @@ describe('processWebhook', () => {
 		expect(doubles.markProcessed).toHaveBeenCalledTimes(1);
 	});
 
-	it('signale un paiement sans email exploitable et alerte', async () => {
+	it('signale un paiement sans aucun critère de recherche et alerte', async () => {
 		const doubles = makePorts({ payment: makePayment({ payer: { email: 'pas-un-email' } }) });
 		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
 
 		expect(outcome.status).toBe('data_error');
 		expect(doubles.notify).toHaveBeenCalledTimes(1);
+		expect(doubles.findPages).not.toHaveBeenCalled();
 		expect(doubles.markPaid).not.toHaveBeenCalled();
+	});
+
+	it("cherche sur l'identité quand le paiement n'a pas d'email exploitable", async () => {
+		const doubles = makePorts({
+			payment: makePayment({ payer: { firstName: 'Membre', lastName: 'Test' } }),
+			matchedBy: 'identité'
+		});
+		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(outcome).toMatchObject({ status: 'updated', email: undefined, matchedBy: 'identité' });
+		expect(doubles.findPages).toHaveBeenCalledWith(
+			{ email: undefined, firstName: 'Membre', lastName: 'Test' },
+			expect.anything()
+		);
+		expect(doubles.markPaid).toHaveBeenCalledTimes(1);
+		expect(doubles.markProcessed).toHaveBeenCalledWith('12345', undefined);
+	});
+
+	it("transmet à Notion l'email normalisé et l'identité du payeur", async () => {
+		const doubles = makePorts();
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.findPages).toHaveBeenCalledWith(
+			{ email: 'membre.test@example.org', firstName: 'Membre', lastName: 'Test' },
+			expect.anything()
+		);
 	});
 
 	it('convertit une erreur de données en résultat, pas en exception', async () => {

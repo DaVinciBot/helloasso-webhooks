@@ -9,6 +9,7 @@ import {
 	helloAssoPaymentSchema,
 	helloAssoWebhookSchema,
 	normalizeEmail,
+	normalizeName,
 	toPaymentId,
 	type HelloAssoOrderRef
 } from './schema.js';
@@ -48,7 +49,8 @@ export type ProcessOutcome =
 	| {
 			readonly status: 'updated';
 			readonly paymentId: string;
-			readonly email: string;
+			readonly email: string | undefined;
+			readonly matchedBy: 'email' | 'identité';
 			readonly pageIds: readonly string[];
 	  };
 
@@ -188,33 +190,45 @@ async function handlePayment(
 	}
 
 	const email = normalizeEmail(payment.payer?.email);
-	if (email === undefined) {
-		throw new DataError('le paiement ne porte aucune adresse email exploitable');
+	const firstName = payment.payer?.firstName;
+	const lastName = payment.payer?.lastName;
+	if (
+		email === undefined &&
+		(normalizeName(firstName) === undefined || normalizeName(lastName) === undefined)
+	) {
+		throw new DataError('le paiement ne porte ni adresse email exploitable ni nom complet');
 	}
 
-	const pageIds = await deps.notion.findPagesByEmail(email, { signal: deps.signal });
+	const match = await deps.notion.findPages(
+		{ email, firstName, lastName },
+		{ signal: deps.signal }
+	);
 
-	if (pageIds.length === 0) {
-		logger.warn({ email }, 'aucune ligne Notion pour cet email');
+	if (match === undefined) {
+		logger.warn({ email, firstName, lastName }, 'aucune ligne Notion pour ce membre');
 		await deps.alerts.notify({
 			title: 'Cotisation payée sans ligne Notion correspondante',
 			fields: {
 				paiement: paymentId,
 				email,
-				action: "vérifier l'adresse du membre dans la base Notion"
+				prénom: firstName,
+				nom: lastName,
+				action: "vérifier l'adresse et le nom du membre dans la base Notion"
 			}
 		});
 		return { status: 'unmatched', paymentId, email };
 	}
 
+	const { pageIds, matchedBy } = match;
+
 	if (pageIds.length > 1) {
 		logger.warn(
-			{ email, matches: pageIds.length },
-			'plusieurs lignes Notion pour cet email, toutes seront cochées'
+			{ email, matchedBy, matches: pageIds.length },
+			'plusieurs lignes Notion pour ce membre, toutes seront cochées'
 		);
 	}
 
-	logger.info({ email, matches: pageIds.length }, 'lignes Notion appariées');
+	logger.info({ email, matchedBy, matches: pageIds.length }, 'lignes Notion appariées');
 
 	for (const pageId of pageIds) {
 		await deps.notion.markPaid(pageId, { signal: deps.signal });
@@ -226,6 +240,6 @@ async function handlePayment(
 	// puis marquera. L'ordre inverse risquerait au contraire de perdre l'écriture.
 	await deps.dedup.markProcessed(paymentId, email);
 
-	logger.info({ email, pages: pageIds.length }, 'paiement traité');
-	return { status: 'updated', paymentId, email, pageIds };
+	logger.info({ email, matchedBy, pages: pageIds.length }, 'paiement traité');
+	return { status: 'updated', paymentId, email, matchedBy, pageIds };
 }

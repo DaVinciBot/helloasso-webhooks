@@ -73,6 +73,9 @@ const envSchema = z.object({
 	NOTION_EMAIL_PROPERTY_TYPE: z.enum(emailPropertyTypes).default('email'),
 	NOTION_PAID_PROPERTY: z.string().min(1),
 
+	NOTION_FIRST_NAME_PROPERTY: z.string().min(1).optional(),
+	NOTION_LAST_NAME_PROPERTY: z.string().min(1).optional(),
+
 	SUPABASE_URL: httpUrl(),
 	SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
@@ -93,6 +96,15 @@ export interface HelloAssoConfig {
 	readonly formType: string | undefined;
 }
 
+/**
+ * Colonnes d'identité du repli. Les deux ensemble ou aucune : apparier sur le
+ * seul nom de famille cocherait la mauvaise ligne dans une fratrie.
+ */
+export interface NameProperties {
+	readonly firstName: string;
+	readonly lastName: string;
+}
+
 export interface NotionConfig {
 	readonly token: string;
 	readonly dataSourceId: string;
@@ -100,6 +112,7 @@ export interface NotionConfig {
 	readonly emailProperty: string;
 	readonly emailPropertyType: EmailPropertyType;
 	readonly paidProperty: string;
+	readonly nameProperties: NameProperties | undefined;
 }
 
 export interface SupabaseConfig {
@@ -139,6 +152,29 @@ function stripTrailingSlash(value: string): string {
 	return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+/**
+ * Une seule des deux colonnes d'identité renseignée est une erreur de
+ * configuration : le repli ne peut pas apparier sur un demi-critère, et le
+ * désactiver en silence donnerait un service qui ne fait pas ce qu'on croit.
+ */
+function readNameProperties(env: {
+	NOTION_FIRST_NAME_PROPERTY?: string | undefined;
+	NOTION_LAST_NAME_PROPERTY?: string | undefined;
+}): NameProperties | undefined {
+	const firstName = env.NOTION_FIRST_NAME_PROPERTY;
+	const lastName = env.NOTION_LAST_NAME_PROPERTY;
+
+	if (firstName === undefined && lastName === undefined) {
+		return undefined;
+	}
+	if (firstName === undefined || lastName === undefined) {
+		throw new ConfigError(
+			'Configuration invalide :\n  - NOTION_FIRST_NAME_PROPERTY et NOTION_LAST_NAME_PROPERTY : les deux ou aucune'
+		);
+	}
+	return { firstName, lastName };
+}
+
 function parseAcceptedStates(value: string): readonly string[] {
 	return value
 		.split(',')
@@ -172,6 +208,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
 		);
 	}
 
+	const nameProperties = readNameProperties(env);
+
 	return {
 		nodeEnv: env.NODE_ENV,
 		port: env.PORT,
@@ -193,7 +231,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
 			version: env.NOTION_VERSION,
 			emailProperty: env.NOTION_EMAIL_PROPERTY,
 			emailPropertyType: env.NOTION_EMAIL_PROPERTY_TYPE,
-			paidProperty: env.NOTION_PAID_PROPERTY
+			paidProperty: env.NOTION_PAID_PROPERTY,
+			nameProperties
 		},
 		supabase: {
 			url: env.SUPABASE_URL,
@@ -222,7 +261,11 @@ export function describeConfig(config: Config): Record<string, unknown> {
 			version: config.notion.version,
 			emailProperty: config.notion.emailProperty,
 			emailPropertyType: config.notion.emailPropertyType,
-			paidProperty: config.notion.paidProperty
+			paidProperty: config.notion.paidProperty,
+			repliParIdentite:
+				config.notion.nameProperties === undefined
+					? 'désactivé'
+					: `${config.notion.nameProperties.firstName} + ${config.notion.nameProperties.lastName}`
 		},
 		alerting: config.alertWebhookUrl === undefined ? 'désactivé' : 'activé',
 		httpTimeoutMs: config.httpTimeoutMs,

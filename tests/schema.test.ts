@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { helloAssoWebhookSchema, normalizeEmail, toPaymentId } from '../src/schema.js';
+import {
+	helloAssoWebhookSchema,
+	normalizeEmail,
+	normalizeName,
+	toPaymentId
+} from '../src/schema.js';
 
 describe('toPaymentId', () => {
 	it('ramène les deux formes renvoyées par HelloAsso à une chaîne', () => {
@@ -18,6 +23,27 @@ describe('normalizeEmail', () => {
 		expect(normalizeEmail('')).toBeUndefined();
 		expect(normalizeEmail('   ')).toBeUndefined();
 		expect(normalizeEmail('sans-arobase')).toBeUndefined();
+	});
+});
+
+describe('normalizeName', () => {
+	it('ramène à une même clé les graphies qui désignent la même personne', () => {
+		const attendu = 'jean michel';
+		expect(normalizeName('Jean-Michel')).toBe(attendu);
+		expect(normalizeName('  JEAN   MICHEL ')).toBe(attendu);
+		expect(normalizeName('Jean Michel')).toBe(attendu);
+	});
+
+	it('retire les accents et les apostrophes', () => {
+		expect(normalizeName('Zoé')).toBe('zoe');
+		expect(normalizeName("D'Amico")).toBe('d amico');
+		expect(normalizeName('DUPONT')).toBe('dupont');
+	});
+
+	it('rejette ce qui ne peut pas servir de critère', () => {
+		expect(normalizeName(undefined)).toBeUndefined();
+		expect(normalizeName('   ')).toBeUndefined();
+		expect(normalizeName('-')).toBeUndefined();
 	});
 });
 
