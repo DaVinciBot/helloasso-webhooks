@@ -7,7 +7,7 @@ De zéro à la première cotisation marquée payée automatiquement, sur le VPS
 Deux environnements :
 
 | Environnement | Hôte                         | Conteneur      | Branche   | HelloAsso   |
-| ------------- | ---------------------------- | -------------- | --------- | ----------- |
+|---------------|------------------------------|----------------|-----------|-------------|
 | staging       | `hook.staging.davincibot.fr` | `hook-staging` | `staging` | bac à sable |
 | prod          | `hook.davincibot.fr`         | `hook-prod`    | `main`    | production  |
 
@@ -21,7 +21,7 @@ le brouillon de la production.
 ## Ce qu'il faut avant de commencer
 
 | Accès                                                   | Pour quoi faire                           |
-| ------------------------------------------------------- | ----------------------------------------- |
+|---------------------------------------------------------|-------------------------------------------|
 | Administrateur de l'espace Notion                       | créer l'intégration, lire l'id de base    |
 | Administrateur du compte association HelloAsso          | créer le client API, déclarer l'URL       |
 | Compte sur `helloasso-sandbox.com`                      | l'équivalent pour staging                 |
@@ -229,7 +229,7 @@ dig +short hook.davincibot.fr hook.staging.davincibot.fr
 ## 7 — GitHub : environnements et secrets
 
 Les workflows `container.yml` et `deploy.yml` appellent
-`DaVinciBot/shared-workflows@v6.1.2`, qui déclenche Watchtower puis sonde
+`DaVinciBot/shared-workflows@v6.1.3`, qui déclenche Watchtower puis sonde
 `/health`. Deux prérequis côté dépôt.
 
 **7.1** Settings → **Environments** → créer `staging` et `prod`.
@@ -240,7 +240,7 @@ production délibéré plutôt qu'accidentel.
 **7.2** Vérifie que ces secrets se résolvent (organisation ou environnement) :
 
 | Secret                | Valeur                                      |
-| --------------------- | ------------------------------------------- |
+|-----------------------|---------------------------------------------|
 | `WATCHTOWER_URL`      | `https://deploy.davincibot.fr`              |
 | `WATCHTOWER_TOKEN`    | `WATCHTOWER_HTTP_API_TOKEN` du VPS          |
 | `PACKAGES_READ_TOKEN` | PAT `read:packages` (secret d'organisation) |
@@ -390,7 +390,7 @@ Un 502 signifie que Caddy ne joint pas le conteneur : vérifie qu'ils partagent 
 Maintenant seulement — les URL existent et répondent.
 
 | Espace                       | URL de notification                                           |
-| ---------------------------- | ------------------------------------------------------------- |
+|------------------------------|---------------------------------------------------------------|
 | `helloasso-sandbox.com`      | `https://hook.staging.davincibot.fr/webhook/<secret staging>` |
 | `helloasso.com` (production) | `https://hook.davincibot.fr/webhook/<secret prod>`            |
 
@@ -451,8 +451,8 @@ curl -X POST "https://hook.staging.davincibot.fr/webhook/<secret staging>" \
 ## 13 — Après la mise en production
 
 - [ ] Les quatre secrets (`WEBHOOK_SECRET`, `HELLOASSO_CLIENT_SECRET`,
-      `NOTION_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`) sont dans le gestionnaire de secrets de l'association, pas seulement dans
-      les `.env` du VPS.
+  `NOTION_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`) sont dans le gestionnaire de secrets de l'association, pas seulement dans
+  les `.env` du VPS.
 - [ ] `/srv/hook/*/.env` sont en `chmod 600`.
 - [ ] L'environnement GitHub `prod` exige une approbation.
 - [ ] Le canal Discord d'alerte est surveillé par quelqu'un de la trésorerie.
