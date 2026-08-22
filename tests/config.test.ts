@@ -13,6 +13,7 @@ function validEnv(overrides: Record<string, string | undefined> = {}): NodeJS.Pr
 		NOTION_EMAIL_PROPERTY: 'Email',
 		NOTION_PAID_PROPERTY: 'Cotisation',
 		NOTION_PAID_STATUS: 'Payé',
+		NOTION_AMOUNT_PROPERTY: 'Montant',
 		SUPABASE_URL: 'https://project.supabase.co',
 		SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
 		...overrides

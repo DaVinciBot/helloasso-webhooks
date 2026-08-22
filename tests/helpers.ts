@@ -37,6 +37,7 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
 			emailPropertyType: 'email',
 			paidProperty: 'Cotisation',
 			paidStatus: 'Payé',
+			amountProperty: 'Montant',
 			nameProperties: { firstName: 'Prénom', lastName: 'Nom' }
 		},
 		supabase: {
@@ -102,7 +103,9 @@ export function makePorts(options: FakePortOptions = {}) {
 				: { pageIds: [...pages], matchedBy: options.matchedBy ?? 'email' }
 		)
 	);
-	const markPaid = vi.fn((): Promise<void> => Promise.resolve());
+	const markPaid = vi.fn(
+		(_pageId: string, _options: { amount: number | undefined }): Promise<void> => Promise.resolve()
+	);
 	const isProcessed = vi.fn((id: string): Promise<boolean> => Promise.resolve(processed.has(id)));
 	const markProcessed = vi.fn((id: string): Promise<void> => {
 		processed.add(id);

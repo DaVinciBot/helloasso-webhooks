@@ -71,6 +71,11 @@ quand elle est payée — accents et majuscules compris, elle est transmise tell
 → `NOTION_PAID_PROPERTY` = `<À_REMPLIR>`
 → `NOTION_PAID_STATUS` = `Payé`
 
+**1.5 ter** Vérifie qu'une propriété **Number** existe pour le montant. Le service y écrit la part revenant à
+l'association, en euros, à chaque paiement traité.
+
+→ `NOTION_AMOUNT_PROPERTY` = `<À_REMPLIR>`
+
 **1.5 bis — facultatif.** Relève les noms exacts des colonnes **prénom** et **nom**. Elles servent de repli quand aucune
 ligne ne porte l'adresse du payeur ; leur type n'a pas à être déclaré. Les deux ou aucune : n'en renseigner qu'une est
 refusé au démarrage.
@@ -419,7 +424,7 @@ cotisation marquée payée
 paiement traité
 ```
 
-**12.3** L'état est posé dans Notion.
+**12.3** L'état est posé dans Notion, et la colonne montant porte la part de l'asso.
 
 **12.4** La trace d'idempotence existe :
 

@@ -108,9 +108,8 @@ Le filtre ne correspond pas au type réel de la propriété email. Vérifie dans
 `NOTION_EMAIL_PROPERTY_TYPE`
 (`email`, `rich_text` ou `title`), puis `sudo docker compose up -d`.
 
-Même symptôme si `NOTION_EMAIL_PROPERTY`, `NOTION_PAID_PROPERTY` ou `NOTION_PAID_STATUS` ne reprend pas
-**exactement** le libellé affiché dans
-Notion — accents et espaces compris.
+Même symptôme si `NOTION_EMAIL_PROPERTY`, `NOTION_PAID_PROPERTY`, `NOTION_PAID_STATUS` ou `NOTION_AMOUNT_PROPERTY` ne
+reprend pas **exactement** le libellé affiché dans Notion — accents et espaces compris.
 
 ### Plusieurs lignes marquées pour un seul paiement
 
@@ -122,8 +121,9 @@ portant `matchedBy`. Dédoublonne la base Notion à l'occasion.
 
 Regarde `matchedBy` dans les logs. `identité` : aucune ligne ne portait l'adresse du payeur, l'appariement s'est fait
 sur `NOTION_FIRST_NAME_PROPERTY`
-et `NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. Remets l'état d'origine, corrige l'email dans
-Notion, puis rejoue le paiement (section « Rejouer un paiement »). Laisser les deux variables vides désactive ce repli.
+et `NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. Remets l'état d'origine, corrige
+l'email dans Notion, puis rejoue le paiement (section « Rejouer un paiement »). Laisser les deux variables vides
+désactive ce repli.
 
 ### Le conteneur ne redémarre pas après un déploiement
 

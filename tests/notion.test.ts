@@ -292,10 +292,25 @@ describe('createNotionClient', () => {
 		expect(api.query).not.toHaveBeenCalled();
 	});
 
-	it("pose l'état configuré sur la propriété configurée", async () => {
+	it("pose l'état et le montant sur les propriétés configurées", async () => {
 		const { api, port } = client([]);
 
-		await port.markPaid('page-1', signal);
+		await port.markPaid('page-1', { amount: 20, ...signal });
+
+		expect(api.update).toHaveBeenCalledWith({
+			page_id: 'page-1',
+			properties: {
+				Cotisation: { status: { name: 'Payé' } },
+				Montant: { number: 20 }
+			}
+		});
+	});
+
+	it('laisse la colonne montant intacte quand le montant est inconnu', async () => {
+		// Écrire 0 effacerait une valeur saisie à la main : on n'y touche pas.
+		const { api, port } = client([]);
+
+		await port.markPaid('page-1', { amount: undefined, ...signal });
 
 		expect(api.update).toHaveBeenCalledWith({
 			page_id: 'page-1',
@@ -308,7 +323,9 @@ describe('createNotionClient', () => {
 		const controller = new AbortController();
 		controller.abort();
 
-		await expect(port.markPaid('page-1', { signal: controller.signal })).rejects.toThrow();
+		await expect(
+			port.markPaid('page-1', { amount: 20, signal: controller.signal })
+		).rejects.toThrow();
 		expect(api.update).not.toHaveBeenCalled();
 	});
 

@@ -12,7 +12,7 @@ import { normalizeEmail, normalizeName } from './schema.js';
 
 /**
  * Accès Notion : recherche de la ligne du membre, puis pose l'état
- * « cotisation payée ».
+ * « cotisation payée » et le montant revenu à l'asso.
  *
  * Le SDK officiel n'expose pas d'`AbortSignal`. Le budget de temps est donc tenu
  * par deux moyens : `timeoutMs` passé au client (borne chaque appel HTTP) et un
@@ -40,8 +40,14 @@ export interface NotionPort {
 	 * aucun critère n'apparie.
 	 */
 	findPages(query: MemberQuery, options: { signal: AbortSignal }): Promise<NotionMatch | undefined>;
-	/** Pose l'état de cotisation configuré sur la page. Idempotent. */
-	markPaid(pageId: string, options: { signal: AbortSignal }): Promise<void>;
+	/**
+	 * Pose l'état de cotisation configuré sur la page, et le montant s'il est
+	 * connu. Idempotent : réécrire les mêmes valeurs est sans effet.
+	 */
+	markPaid(
+		pageId: string,
+		options: { amount: number | undefined; signal: AbortSignal }
+	): Promise<void>;
 }
 
 /**
@@ -84,6 +90,9 @@ export interface NotionRow {
 	readonly properties?: Record<string, unknown> | undefined;
 }
 
+/** Les deux seules formes de valeur que le service écrit. */
+export type PropertyUpdate = { status: { name: string } } | { number: number };
+
 /**
  * Surface Notion réellement utilisée par ce service — deux appels.
  *
@@ -100,10 +109,7 @@ export interface NotionApi {
 		}): Promise<{ results: NotionRow[]; next_cursor: string | null }>;
 	};
 	pages: {
-		update(args: {
-			page_id: string;
-			properties: Record<string, { status: { name: string } }>;
-		}): Promise<unknown>;
+		update(args: { page_id: string; properties: Record<string, PropertyUpdate> }): Promise<unknown>;
 	};
 }
 
@@ -354,13 +360,15 @@ export function createNotionClient(config: NotionConfig, deps: NotionClientDeps)
 
 		async markPaid(pageId, options): Promise<void> {
 			options.signal.throwIfAborted();
+			const properties: Record<string, PropertyUpdate> = {
+				[config.paidProperty]: { status: { name: config.paidStatus } }
+			};
+			if (options.amount !== undefined) {
+				properties[config.amountProperty] = { number: options.amount };
+			}
+
 			try {
-				await client.pages.update({
-					page_id: pageId,
-					properties: {
-						[config.paidProperty]: { status: { name: config.paidStatus } }
-					}
-				});
+				await client.pages.update({ page_id: pageId, properties });
 			} catch (error) {
 				throw mapNotionError(error, `mise à jour de la page ${pageId}`);
 			}

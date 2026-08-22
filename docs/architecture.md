@@ -36,7 +36,7 @@ POST /webhook/:secret
   ├─ 5. Notion : filtre email equals
   │     puis, si 0 ligne, balayage : email, sinon
   │     prénom + nom, comparés normalisés ───────── 0 → 200 unmatched + alerte
-  ├─ 6. Notion : PATCH status = NOTION_PAID_STATUS   (× n lignes)
+  ├─ 6. Notion : PATCH status + montant   (× n lignes)
   ├─ 7. INSERT processed_payments ON CONFLICT DO NOTHING
   └─────────────────────────────────────────────────── → 200 updated
 ```

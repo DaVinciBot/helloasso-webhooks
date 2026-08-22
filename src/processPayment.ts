@@ -10,6 +10,7 @@ import {
 	helloAssoWebhookSchema,
 	normalizeEmail,
 	normalizeName,
+	organizationAmount,
 	toPaymentId,
 	type HelloAssoOrderRef
 } from './schema.js';
@@ -189,6 +190,7 @@ async function handlePayment(
 		return { status: 'ignored', reason: `statut_${payment.state ?? 'inconnu'}` };
 	}
 
+	const amount = organizationAmount(payment);
 	const email = normalizeEmail(payment.payer?.email);
 	const firstName = payment.payer?.firstName;
 	const lastName = payment.payer?.lastName;
@@ -213,6 +215,7 @@ async function handlePayment(
 				email,
 				prénom: firstName,
 				nom: lastName,
+				montant: amount === undefined ? undefined : `${amount.toFixed(2)} €`,
 				action: "vérifier l'adresse et le nom du membre dans la base Notion"
 			}
 		});
@@ -230,9 +233,14 @@ async function handlePayment(
 
 	logger.info({ email, matchedBy, matches: pageIds.length }, 'lignes Notion appariées');
 
+	if (amount === undefined) {
+		// Sans montant, l'état est quand même posé : la cotisation reste visible.
+		logger.warn('paiement sans montant exploitable, colonne montant laissée telle quelle');
+	}
+
 	for (const pageId of pageIds) {
-		await deps.notion.markPaid(pageId, { signal: deps.signal });
-		logger.info({ pageId }, 'cotisation marquée payée');
+		await deps.notion.markPaid(pageId, { amount, signal: deps.signal });
+		logger.info({ pageId, amount }, 'cotisation marquée payée');
 	}
 
 	// Marquage en dernier : si le process meurt entre l'écriture Notion et ce

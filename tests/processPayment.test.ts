@@ -160,6 +160,7 @@ describe('processWebhook', () => {
 		expect(doubles.notify.mock.calls[0]?.[0]).toMatchObject({
 			fields: {
 				paiement: '12345',
+				montant: '20.00 €',
 				email: 'membre.test@example.org',
 				prénom: 'Membre',
 				nom: 'Test'
@@ -168,6 +169,30 @@ describe('processWebhook', () => {
 		// Non enregistré : si la ligne Notion est créée plus tard, un rejeu manuel
 		// doit pouvoir aboutir.
 		expect(doubles.markProcessed).not.toHaveBeenCalled();
+	});
+
+	it("écrit le montant revenant à l'asso sur chaque ligne", async () => {
+		const doubles = makePorts({
+			payment: makePayment({ amount: 2200, items: [{ shareAmount: 2000 }] })
+		});
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.markPaid).toHaveBeenCalledWith(
+			'page-1',
+			expect.objectContaining({ amount: 20 })
+		);
+	});
+
+	it("marque la ligne sans montant quand le paiement n'en porte aucun", async () => {
+		const doubles = makePorts({ payment: makePayment({ amount: undefined, items: undefined }) });
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.markPaid).toHaveBeenCalledWith(
+			'page-1',
+			expect.objectContaining({ amount: undefined })
+		);
 	});
 
 	it('marque toutes les lignes quand plusieurs partagent le même email', async () => {

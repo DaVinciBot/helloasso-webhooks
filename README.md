@@ -1,7 +1,7 @@
 # helloasso-notion-webhook
 
-Micro-service HTTP mono-endpoint : à chaque cotisation payée sur HelloAsso, il pose l'état « cotisation payée » sur la
-ligne du membre dans une base Notion, appariée par adresse email.
+Micro-service HTTP mono-endpoint : à chaque cotisation payée sur HelloAsso, il pose l'état « cotisation payée » et le
+montant revenu à l'asso sur la ligne du membre dans une base Notion, appariée par adresse email.
 
 ```
 HelloAsso ──notification──▶ POST /webhook/<secret>
@@ -9,7 +9,7 @@ HelloAsso ──notification──▶ POST /webhook/<secret>
                                  ├─ 1. déjà traité ?          Supabase
                                  ├─ 2. réconciliation          API HelloAsso v5
                                  ├─ 3. recherche du membre     API Notion
-                                 ├─ 4. état posé               API Notion
+                                 ├─ 4. état + montant posés    API Notion
                                  └─ 5. mémorisé                Supabase
 ```
 

@@ -20,6 +20,14 @@ export const helloAssoPayerSchema = z.object({
 	lastName: z.string().optional()
 });
 
+/**
+ * Ligne d'une commande. Seule `shareAmount` est lue : c'est la part de cette
+ * ligne effectivement couverte par le paiement, du point de vue de l'asso.
+ */
+export const helloAssoPaymentItemSchema = z.object({
+	shareAmount: z.number().optional()
+});
+
 export const helloAssoOrderRefSchema = z.object({
 	id: identifier.optional(),
 	formSlug: z.string().optional(),
@@ -33,7 +41,8 @@ export const helloAssoPaymentSchema = z.object({
 	amount: z.number().optional(),
 	date: z.string().optional(),
 	payer: helloAssoPayerSchema.optional(),
-	order: helloAssoOrderRefSchema.optional()
+	order: helloAssoOrderRefSchema.optional(),
+	items: z.array(helloAssoPaymentItemSchema).optional()
 });
 
 export const helloAssoWebhookSchema = z.object({
@@ -43,6 +52,7 @@ export const helloAssoWebhookSchema = z.object({
 });
 
 export type HelloAssoPayer = z.infer<typeof helloAssoPayerSchema>;
+export type HelloAssoPaymentItem = z.infer<typeof helloAssoPaymentItemSchema>;
 export type HelloAssoOrderRef = z.infer<typeof helloAssoOrderRefSchema>;
 export type HelloAssoPayment = z.infer<typeof helloAssoPaymentSchema>;
 export type HelloAssoWebhook = z.infer<typeof helloAssoWebhookSchema>;
@@ -96,4 +106,27 @@ export function normalizeName(name: string | undefined): string | undefined {
 		.replace(/\s+/g, ' ')
 		.trim();
 	return normalized === '' ? undefined : normalized;
+}
+
+/**
+ * Montant revenant à l'association, en euros.
+ *
+ * HelloAsso compte en centimes et distingue ce que le payeur débourse
+ * (`amount`, contribution volontaire au site comprise) de ce qui revient à
+ * l'association (la somme des `items[].shareAmount`). C'est la seconde qui a sa
+ * place dans la base des cotisations. Repli sur `amount` quand le détail
+ * manque — mieux vaut un montant approché qu'une colonne vide —, `undefined` si
+ * le paiement ne porte aucun montant exploitable.
+ */
+export function organizationAmount(payment: HelloAssoPayment): number | undefined {
+	const shares = (payment.items ?? [])
+		.map((item) => item.shareAmount)
+		.filter((share): share is number => typeof share === 'number');
+	const cents =
+		shares.length > 0 ? shares.reduce((total, share) => total + share, 0) : payment.amount;
+
+	if (cents === undefined || !Number.isFinite(cents)) {
+		return undefined;
+	}
+	return Math.round(cents) / 100;
 }

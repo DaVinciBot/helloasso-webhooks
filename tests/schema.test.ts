@@ -3,6 +3,7 @@ import {
 	helloAssoWebhookSchema,
 	normalizeEmail,
 	normalizeName,
+	organizationAmount,
 	toPaymentId
 } from '../src/schema.js';
 
@@ -44,6 +45,33 @@ describe('normalizeName', () => {
 		expect(normalizeName(undefined)).toBeUndefined();
 		expect(normalizeName('   ')).toBeUndefined();
 		expect(normalizeName('-')).toBeUndefined();
+	});
+});
+
+describe('organizationAmount', () => {
+	it("somme les parts revenant à l'asso et convertit les centimes en euros", () => {
+		expect(
+			organizationAmount({
+				id: 1,
+				amount: 2500,
+				items: [{ shareAmount: 2000 }, { shareAmount: 500 }]
+			})
+		).toBe(25);
+	});
+
+	it('ignore la contribution volontaire versée à HelloAsso', () => {
+		// `amount` porte 22 € débités, dont 2 € pour HelloAsso : l'asso touche 20 €.
+		expect(organizationAmount({ id: 1, amount: 2200, items: [{ shareAmount: 2000 }] })).toBe(20);
+	});
+
+	it('se replie sur le montant débité quand le détail manque', () => {
+		expect(organizationAmount({ id: 1, amount: 2000 })).toBe(20);
+		expect(organizationAmount({ id: 1, amount: 2000, items: [] })).toBe(20);
+		expect(organizationAmount({ id: 1, amount: 2000, items: [{}] })).toBe(20);
+	});
+
+	it('rend undefined quand le paiement ne porte aucun montant', () => {
+		expect(organizationAmount({ id: 1 })).toBeUndefined();
 	});
 });
 
