@@ -130,7 +130,7 @@ d'argent.
 - [`deploy/prod/`](deploy/prod/docker-compose.yml) et [`deploy/staging/`](deploy/staging/docker-compose.yml) — à copier
   dans `/srv/hook/<env>/`
 - [`deploy/Caddyfile.snippet`](deploy/Caddyfile.snippet) — blocs à ajouter à `/srv/proxy/Caddyfile`
-- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v6.1.3`
+- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v6.1.2`
 
 La marche à suivre complète est dans
 [`docs/runbook-production.md`](docs/runbook-production.md).
