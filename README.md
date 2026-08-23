@@ -1,8 +1,8 @@
 # helloasso-notion-webhook
 
 Micro-service HTTP mono-endpoint : à chaque cotisation payée sur HelloAsso, il pose l'état « cotisation payée » et le
-montant revenu à l'asso sur la ligne de l'adhérent dans une base Notion, appariée par adresse email ou, quand
-la cotisation a été réglée par un tiers, par prénom et nom.
+montant revenu à l'asso sur la ligne de l'adhérent dans une base Notion, appariée par adresse email ou, quand la
+cotisation a été réglée par un tiers, par prénom et nom.
 
 ```
 HelloAsso ──notification──▶ POST /webhook/<secret>
@@ -131,7 +131,7 @@ d'argent.
 - [`deploy/prod/`](deploy/prod/docker-compose.yml) et [`deploy/staging/`](deploy/staging/docker-compose.yml) — à copier
   dans `/srv/hook/<env>/`
 - [`deploy/Caddyfile.snippet`](deploy/Caddyfile.snippet) — blocs à ajouter à `/srv/proxy/Caddyfile`
-- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v6.2.0`
+- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v7.0.1`
 
 La marche à suivre complète est dans
 [`docs/runbook-production.md`](docs/runbook-production.md).
