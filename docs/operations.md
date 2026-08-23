@@ -48,6 +48,27 @@ sudo docker compose logs --since 24h | grep '"paymentId":"12345"'
 | `panne passagère, rejeu attendu`          | 503 renvoyé, HelloAsso rejouera                              |
 | `secret de webhook invalide`              | 401 — sondage automatisé, ou secret mal recopié              |
 
+### Voir les échanges bruts avec HelloAsso
+
+Quand les messages ci-dessus ne suffisent pas — un paiement qui n'aboutit pas dans Notion sans erreur visible, un doute
+sur ce que HelloAsso envoie vraiment — passe le service en `LOG_LEVEL=debug` et rejoue la notification. Trois traces
+supplémentaires apparaissent :
+
+| Message                                    | Contenu                                                                       |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| `appel HelloAsso reçu (brut)`              | méthode, en-têtes et **corps exact** de la notification, avant interprétation |
+| `lecture du paiement demandée à HelloAsso` | URL appelée sur l'API v5 pour relire le paiement                              |
+| `réponse de paiement HelloAsso (brut)`     | statut HTTP, en-têtes et **corps exact** renvoyé par l'API v5                 |
+
+```bash
+sudo docker compose logs --since 1h | grep '(brut)' | npx pino-pretty
+```
+
+Les corps sont journalisés tels quels, tronqués seulement au-delà de 32 Ko. Le chemin du webhook n'apparaît jamais (il
+porte le secret), l'en-tête `authorization` et le jeton d'accès HelloAsso sont caviardés. En revanche ces lignes
+contiennent l'identité et l'adresse du payeur : `debug` est un mode de diagnostic, pas un réglage permanent — remets
+`info` une fois l'incident compris.
+
 ---
 
 ## Incidents

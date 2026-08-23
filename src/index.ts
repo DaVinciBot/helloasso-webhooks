@@ -5,7 +5,7 @@ import type { Config } from './config.js';
 import type { DedupPort } from './dedup.js';
 import { describeError, isTransientError } from './errors.js';
 import type { HelloAssoPort } from './helloasso.js';
-import type { Logger } from './logger.js';
+import { forLog, type Logger } from './logger.js';
 import type { NotionPort } from './notion.js';
 import { processWebhook, type ProcessOutcome } from './processPayment.js';
 
@@ -84,9 +84,27 @@ export function createApp(deps: AppDeps): Hono {
 			return c.json({ status: 'payload_too_large' }, 413);
 		}
 
+		let raw: string;
+		try {
+			raw = await c.req.text();
+		} catch (error) {
+			logger.warn({ err: describeError(error) }, 'corps de notification illisible');
+			return c.json({ status: 'invalid_json' }, 400);
+		}
+
+		logger.debug(
+			{
+				method: c.req.method,
+				headers: c.req.header(),
+				contentLength,
+				body: forLog(raw)
+			},
+			'appel HelloAsso reçu (brut)'
+		);
+
 		let body: unknown;
 		try {
-			body = await c.req.json();
+			body = JSON.parse(raw);
 		} catch (error) {
 			logger.warn({ err: describeError(error) }, 'corps de notification illisible');
 			return c.json({ status: 'invalid_json' }, 400);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { HelloAssoConfig } from './config.js';
 import { DataError, TransientError, isTransientHttpStatus } from './errors.js';
-import type { Logger } from './logger.js';
+import { forLog, type Logger } from './logger.js';
 import { helloAssoPaymentSchema, type HelloAssoPayment } from './schema.js';
 
 /**
@@ -142,14 +142,24 @@ export function createHelloAssoClient(
 		return token.accessToken;
 	}
 
+	/** Réponse brute d'une lecture de paiement : corps lu une seule fois, ici. */
+	interface RawPaymentResponse {
+		readonly response: Response;
+		readonly body: string;
+	}
+
 	async function getPaymentOnce(
 		paymentId: string,
 		accessToken: string,
 		signal: AbortSignal
-	): Promise<Response> {
+	): Promise<RawPaymentResponse> {
 		const url = `${config.apiBase}/payments/${encodeURIComponent(paymentId)}`;
+
+		logger.debug({ paymentId, url, method: 'GET' }, 'lecture du paiement demandée à HelloAsso');
+
+		let response: Response;
 		try {
-			return await doFetch(url, {
+			response = await doFetch(url, {
 				method: 'GET',
 				headers: {
 					authorization: `Bearer ${accessToken}`,
@@ -162,20 +172,42 @@ export function createHelloAssoClient(
 				cause
 			});
 		}
+
+		let body: string;
+		try {
+			body = await response.text();
+		} catch (cause) {
+			throw new TransientError('HelloAsso : réponse de paiement illisible', { cause });
+		}
+
+		logger.debug(
+			{
+				paymentId,
+				url,
+				status: response.status,
+				headers: Object.fromEntries(response.headers),
+				body: forLog(body)
+			},
+			'réponse de paiement HelloAsso (brut)'
+		);
+
+		return { response, body };
 	}
 
 	return {
 		async getPayment(paymentId, options): Promise<HelloAssoPayment> {
 			let token = await getToken(options.signal);
-			let response = await getPaymentOnce(paymentId, token, options.signal);
+			let read = await getPaymentOnce(paymentId, token, options.signal);
 
 			// Un jeton peut être révoqué avant son expiration annoncée : on
 			// retente une fois avec un jeton neuf avant de conclure à une panne.
-			if (response.status === 401) {
+			if (read.response.status === 401) {
 				logger.warn({ paymentId }, 'jeton HelloAsso refusé, renouvellement');
 				token = await getToken(options.signal, true);
-				response = await getPaymentOnce(paymentId, token, options.signal);
+				read = await getPaymentOnce(paymentId, token, options.signal);
 			}
+
+			const { response, body: rawPayment } = read;
 
 			if (response.status === 404) {
 				throw new DataError(`HelloAsso : paiement ${paymentId} introuvable`);
@@ -192,9 +224,12 @@ export function createHelloAssoClient(
 				);
 			}
 
-			const payload: unknown = await response.json().catch((cause: unknown) => {
+			let payload: unknown;
+			try {
+				payload = JSON.parse(rawPayment);
+			} catch (cause) {
 				throw new TransientError('HelloAsso : réponse de paiement illisible', { cause });
-			});
+			}
 
 			const parsed = helloAssoPaymentSchema.safeParse(payload);
 			if (!parsed.success) {
