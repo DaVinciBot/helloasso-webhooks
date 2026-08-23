@@ -229,7 +229,7 @@ dig +short hook.davincibot.fr hook.staging.davincibot.fr
 ## 7 — GitHub : environnements et secrets
 
 Les workflows `container.yml` et `deploy.yml` appellent
-`DaVinciBot/shared-workflows@v6.1.2`, qui déclenche Watchtower puis sonde
+`DaVinciBot/shared-workflows@v6.2.0`, qui déclenche Watchtower puis sonde
 `/health`. Deux prérequis côté dépôt.
 
 **7.1** Settings → **Environments** → créer `staging` et `prod`.
