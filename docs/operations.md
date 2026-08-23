@@ -51,14 +51,16 @@ sudo docker compose logs --since 24h | grep '"paymentId":"12345"'
 ### Voir les échanges bruts avec HelloAsso
 
 Quand les messages ci-dessus ne suffisent pas — un paiement qui n'aboutit pas dans Notion sans erreur visible, un doute
-sur ce que HelloAsso envoie vraiment — passe le service en `LOG_LEVEL=debug` et rejoue la notification. Trois traces
+sur ce que HelloAsso envoie vraiment — passe le service en `LOG_LEVEL=debug` et rejoue la notification. Cinq traces
 supplémentaires apparaissent :
 
-| Message                                    | Contenu                                                                       |
-| ------------------------------------------ | ----------------------------------------------------------------------------- |
-| `appel HelloAsso reçu (brut)`              | méthode, en-têtes et **corps exact** de la notification, avant interprétation |
-| `lecture du paiement demandée à HelloAsso` | URL appelée sur l'API v5 pour relire le paiement                              |
-| `réponse de paiement HelloAsso (brut)`     | statut HTTP, en-têtes et **corps exact** renvoyé par l'API v5                 |
+| Message                                       | Contenu                                                                       |
+| --------------------------------------------- | ----------------------------------------------------------------------------- |
+| `appel HelloAsso reçu (brut)`                 | méthode, en-têtes et **corps exact** de la notification, avant interprétation |
+| `lecture du paiement demandée à HelloAsso`    | URL appelée sur l'API v5 pour relire le paiement                              |
+| `réponse de paiement HelloAsso (brut)`        | statut HTTP, en-têtes et **corps exact** renvoyé par l'API v5                 |
+| `lecture de la commande demandée à HelloAsso` | URL appelée sur l'API v5 pour lire la commande — elle porte l'adhérent        |
+| `réponse de commande HelloAsso (brut)`        | statut HTTP, en-têtes et **corps exact** de la commande                       |
 
 ```bash
 sudo docker compose logs --since 1h | grep '(brut)' | npx pino-pretty
@@ -66,7 +68,8 @@ sudo docker compose logs --since 1h | grep '(brut)' | npx pino-pretty
 
 Les corps sont journalisés tels quels, tronqués seulement au-delà de 32 Ko. Le chemin du webhook n'apparaît jamais (il
 porte le secret), l'en-tête `authorization` et le jeton d'accès HelloAsso sont caviardés. En revanche ces lignes
-contiennent l'identité et l'adresse du payeur : `debug` est un mode de diagnostic, pas un réglage permanent — remets
+contiennent l'identité de l'adhérent, celle du payeur et son adresse : `debug` est un mode de diagnostic, pas un réglage
+permanent — remets
 `info` une fois l'incident compris.
 
 ---
@@ -77,11 +80,12 @@ contiennent l'identité et l'adresse du payeur : `debug` est un mode de diagnost
 
 C'est l'incident le plus courant, et il n'est presque jamais technique.
 
-**1. L'alerte Discord est-elle tombée ?** Si oui, elle contient l'email du payeur : cette adresse n'existe dans aucune
-ligne de la base Notion.
+**1. L'alerte Discord est-elle tombée ?** Si oui, elle nomme l'adhérent — et, quand un tiers a réglé pour lui, le
+payeur : ni cette adresse ni ce nom n'existent dans la base Notion.
 
 Causes habituelles : le membre a payé avec une autre adresse que celle renseignée, une faute de frappe, ou la ligne n'a
-jamais été créée.
+jamais été créée. Quand l'alerte porte un champ `payeur`, l'adhésion a été réglée par quelqu'un d'autre : c'est le nom
+de l'adhérent, pas celui du payeur, qui doit exister dans Notion.
 
 Correction : mets à jour l'adresse dans Notion, **puis rejoue le paiement**
 (section suivante). Un paiement non apparié n'est pas enregistré comme traité, précisément pour que ce rejeu aboutisse.
@@ -138,13 +142,13 @@ Comportement voulu : plusieurs lignes portent le même email — ou, en repli, l
 les marque toutes et journalise un `warn`
 portant `matchedBy`. Dédoublonne la base Notion à l'occasion.
 
-### La ligne marquée n'est pas celle du payeur
+### La ligne marquée n'est pas celle du membre
 
-Regarde `matchedBy` dans les logs. `identité` : aucune ligne ne portait l'adresse du payeur, l'appariement s'est fait
-sur `NOTION_FIRST_NAME_PROPERTY`
-et `NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. Remets l'état d'origine, corrige
-l'email dans Notion, puis rejoue le paiement (section « Rejouer un paiement »). Laisser les deux variables vides
-désactive ce repli.
+Regarde `matchedBy` dans les logs. `identité` : l'appariement s'est fait sur `NOTION_FIRST_NAME_PROPERTY` et
+`NOTION_LAST_NAME_PROPERTY` — deux homonymes suffisent à se tromper de ligne. C'est le mode normal quand un tiers a
+réglé la cotisation : l'email connu est le sien, il n'est alors pas retenu comme critère. Remets l'état d'origine,
+corrige le prénom et le nom dans Notion, puis rejoue le paiement (section « Rejouer un paiement »). Laisser les deux
+variables vides désactive ce repli — et, avec lui, tout appariement des adhésions réglées par un tiers.
 
 ### Le conteneur ne redémarre pas après un déploiement
 

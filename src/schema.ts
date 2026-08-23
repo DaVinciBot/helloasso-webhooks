@@ -21,11 +21,28 @@ export const helloAssoPayerSchema = z.object({
 });
 
 /**
- * Ligne d'une commande. Seule `shareAmount` est lue : c'est la part de cette
- * ligne effectivement couverte par le paiement, du point de vue de l'asso.
+ * Adhérent porté par une ligne de commande. HelloAsso ne lui connaît qu'un
+ * prénom et un nom : l'email du formulaire est celui du payeur.
+ */
+export const helloAssoUserSchema = z.object({
+	firstName: z.string().optional(),
+	lastName: z.string().optional()
+});
+
+/**
+ * Ligne d'une commande vue depuis le paiement. `shareAmount` est la part de
+ * cette ligne effectivement couverte par le paiement, du point de vue de
+ * l'asso ; `id` sert à retrouver la même ligne dans la commande.
  */
 export const helloAssoPaymentItemSchema = z.object({
+	id: identifier.optional(),
 	shareAmount: z.number().optional()
+});
+
+/** Ligne d'une commande vue depuis la commande : elle, porte l'adhérent. */
+export const helloAssoOrderItemSchema = z.object({
+	id: identifier.optional(),
+	user: helloAssoUserSchema.optional()
 });
 
 export const helloAssoOrderRefSchema = z.object({
@@ -33,6 +50,14 @@ export const helloAssoOrderRefSchema = z.object({
 	formSlug: z.string().optional(),
 	formType: z.string().optional(),
 	organizationSlug: z.string().optional()
+});
+
+/**
+ * Commande relue auprès de l'API v5. Même en-tête que la référence portée par
+ * le paiement, plus les lignes — la seule source d'identité des adhérents.
+ */
+export const helloAssoOrderSchema = helloAssoOrderRefSchema.extend({
+	items: z.array(helloAssoOrderItemSchema).optional()
 });
 
 export const helloAssoPaymentSchema = z.object({
@@ -52,8 +77,11 @@ export const helloAssoWebhookSchema = z.object({
 });
 
 export type HelloAssoPayer = z.infer<typeof helloAssoPayerSchema>;
+export type HelloAssoUser = z.infer<typeof helloAssoUserSchema>;
 export type HelloAssoPaymentItem = z.infer<typeof helloAssoPaymentItemSchema>;
+export type HelloAssoOrderItem = z.infer<typeof helloAssoOrderItemSchema>;
 export type HelloAssoOrderRef = z.infer<typeof helloAssoOrderRefSchema>;
+export type HelloAssoOrder = z.infer<typeof helloAssoOrderSchema>;
 export type HelloAssoPayment = z.infer<typeof helloAssoPaymentSchema>;
 export type HelloAssoWebhook = z.infer<typeof helloAssoWebhookSchema>;
 
@@ -129,4 +157,79 @@ export function organizationAmount(payment: HelloAssoPayment): number | undefine
 		return undefined;
 	}
 	return Math.round(cents) / 100;
+}
+
+/**
+ * Adhérent réglé par ce paiement.
+ *
+ * HelloAsso distingue le *payeur* — celui dont la carte est débitée — de
+ * l'*adhérent*, porté par la ligne de commande (`items[].user`). Les deux
+ * coïncident dans le cas courant, pas quand un tiers règle la cotisation ; or
+ * c'est l'adhérent, et lui seul, qui a une ligne dans la base des adhésions.
+ * La réponse `/payments/{id}` ne le porte pas : il faut la commande.
+ *
+ * Le paiement dit quelles lignes il couvre, la commande dit qui elles
+ * concernent : on apparie par id de ligne, et on se rabat sur les lignes de la
+ * commande quand le paiement n'en désigne aucune d'exploitable. Une identité
+ * incomplète est ignorée — elle n'apparierait rien. Fonction pure.
+ */
+export function adherentOf(
+	payment: HelloAssoPayment,
+	order: HelloAssoOrder | undefined
+): HelloAssoUser | undefined {
+	const items = order?.items ?? [];
+	const paidIds = new Set(
+		(payment.items ?? [])
+			.map((item) => item.id)
+			.filter((id): id is number | string => id !== undefined)
+			.map((id) => String(id))
+	);
+
+	const covered = items.filter((item) => item.id !== undefined && paidIds.has(String(item.id)));
+	const candidates = covered.length > 0 ? covered : items;
+
+	return candidates
+		.map((item) => item.user)
+		.find(
+			(user) =>
+				normalizeName(user?.firstName) !== undefined && normalizeName(user?.lastName) !== undefined
+		);
+}
+
+/** Critères de recherche de la ligne Notion du membre. */
+export interface MemberIdentity {
+	readonly email: string | undefined;
+	readonly firstName: string | undefined;
+	readonly lastName: string | undefined;
+}
+
+/**
+ * Critères d'appariement du membre, à partir du payeur et de l'adhérent.
+ *
+ * L'identité vient de l'adhérent dès qu'elle est exploitable, du payeur sinon
+ * — mieux vaut un repli que pas de critère du tout.
+ *
+ * L'email, lui, n'existe que côté payeur. Le retenir sans réserve reviendrait,
+ * quand un tiers règle la cotisation, à marquer payée la ligne *du payeur* :
+ * l'erreur est silencieuse et touche deux membres à la fois. On ne le garde
+ * donc que lorsqu'il désigne bien l'adhérent — noms concordants, ou aucune
+ * identité d'adhérent connue. Fonction pure.
+ */
+export function memberIdentity(
+	payer: HelloAssoPayer | undefined,
+	adherent: HelloAssoUser | undefined
+): MemberIdentity {
+	const payerFirst = normalizeName(payer?.firstName);
+	const payerLast = normalizeName(payer?.lastName);
+	const adherentFirst = normalizeName(adherent?.firstName);
+	const adherentLast = normalizeName(adherent?.lastName);
+
+	const known = adherentFirst !== undefined && adherentLast !== undefined;
+	const samePerson = !known || (adherentFirst === payerFirst && adherentLast === payerLast);
+
+	return {
+		email: samePerson ? normalizeEmail(payer?.email) : undefined,
+		firstName: known ? adherent?.firstName : payer?.firstName,
+		lastName: known ? adherent?.lastName : payer?.lastName
+	};
 }

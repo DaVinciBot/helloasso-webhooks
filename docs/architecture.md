@@ -32,12 +32,13 @@ POST /webhook/:secret
   ├─ 1. déjà dans processed_payments ? ───────────── ✓ → 200 already_handled
   ├─ 2. GET /v5/payments/{id} ← fait autorité
   ├─ 3. campagne + statut confirmés ? ────────────── ✗ → 200 ignored
-  ├─ 4. email ou identité du payeur exploitable ? ── ✗ → 200 data_error + alerte
-  ├─ 5. Notion : filtre email equals
+  ├─ 4. GET /v5/orders/{id} ← identité de l'adhérent
+  ├─ 5. email ou identité exploitable ? ──────────── ✗ → 200 data_error + alerte
+  ├─ 6. Notion : filtre email equals
   │     puis, si 0 ligne, balayage : email, sinon
   │     prénom + nom, comparés normalisés ───────── 0 → 200 unmatched + alerte
-  ├─ 6. Notion : PATCH status + montant   (× n lignes)
-  ├─ 7. INSERT processed_payments ON CONFLICT DO NOTHING
+  ├─ 7. Notion : PATCH status + montant   (× n lignes)
+  ├─ 8. INSERT processed_payments ON CONFLICT DO NOTHING
   └─────────────────────────────────────────────────── → 200 updated
 ```
 
@@ -54,6 +55,25 @@ authentifiée en OAuth2.
 Conséquence pratique : un test vérifie explicitement qu'un payload annonçant
 `Authorized` alors que HelloAsso répond `Refused` n'écrit rien.
 
+### Le payeur n'est pas l'adhérent
+
+HelloAsso sépare les deux : le **payeur** est celui dont la carte est débitée, l'**adhérent** est porté par la ligne de
+commande (`items[].user`). Ils coïncident dans le cas courant, pas quand un parent, un ami ou la trésorerie règle la
+cotisation d'un membre. Seul l'adhérent a une ligne dans la base des adhésions.
+
+`GET /v5/payments/{id}` ne connaît que le payeur — ses `items` ne portent que des montants. L'identité de l'adhérent
+demande donc une seconde lecture, `GET /v5/orders/{id}`, faite après les filtres de campagne et de statut : un paiement
+écarté ne la déclenche pas.
+
+L'email, lui, n'existe **que** côté payeur : le formulaire ne demande à l'adhérent qu'un prénom et un nom. Le retenir
+sans réserve reviendrait, sur un règlement par un tiers, à marquer payée la ligne _du payeur_ — une erreur silencieuse
+qui touche deux membres à la fois. Il n'est donc gardé comme critère que lorsqu'il désigne bien l'adhérent : noms
+concordants, ou aucune identité d'adhérent connue. Sinon l'appariement se fait sur le seul prénom + nom de l'adhérent,
+et l'alerte « aucune ligne Notion » nomme le payeur, pour retrouver le paiement côté HelloAsso.
+
+La colonne `payer_email` de `processed_payments` garde, elle, l'email du payeur : c'est la trace du règlement, pas le
+critère d'appariement.
+
 ### Le secret d'URL
 
 C'est la seule barrière disponible. Elle est traitée en conséquence :
@@ -68,7 +88,7 @@ C'est la seule barrière disponible. Elle est traitée en conséquence :
 Le choix du code HTTP n'est pas cosmétique : il décide si HelloAsso rejoue.
 
 | Classe           | Réponse | Rejeu | Exemples                                             |
-|------------------|---------|-------|------------------------------------------------------|
+| ---------------- | ------- | ----- | ---------------------------------------------------- |
 | `TransientError` | 503     | oui   | réseau coupé, 5xx amont, quota, timeout, Supabase HS |
 | `DataError`      | 200     | non   | email inconnu de Notion, propriété inexistante       |
 | `ConfigError`    | —       | —     | jetée au démarrage, le process refuse de se lancer   |
@@ -213,7 +233,7 @@ dans une colonne texte, le type est une variable d'environnement plutôt qu'une 
 Le service se conforme aux conventions d'infrastructure de DaVinciBot plutôt que d'y faire exception.
 
 | Convention de la flotte                          | Application ici                                                  |
-|--------------------------------------------------|------------------------------------------------------------------|
+| ------------------------------------------------ | ---------------------------------------------------------------- |
 | réseau Docker `web`, externe                     | `deploy/*/docker-compose.yml`                                    |
 | `/srv/<service>/<env>/{.env,docker-compose.yml}` | `/srv/hook/staging`, `/srv/hook/prod`                            |
 | `name:` et `container_name: <svc>-<env>`         | `hook-staging`, `hook-prod`                                      |
@@ -244,7 +264,7 @@ bloquerait la publication. Elle y ajoute
 ### Autres choix d'implémentation
 
 | Choix                                             | Pourquoi                                                                                                    |
-|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `index.ts` = app + route, `server.ts` = démarrage | permet à Vitest d'instancier l'app sans ouvrir de port                                                      |
 | migration dans `DaVinciBot/Supabased`             | choix d'exploitation : toutes les migrations de l'association au même endroit                               |
 | étage `pnpm install --prod` dédié au `Dockerfile` | `pnpm deploy` suppose un workspace ; `--legacy` est en voie de retrait. C'est aussi ce que fait `auth`      |
@@ -256,7 +276,7 @@ bloquerait la publication. Elle y ajoute
 ## Dépendances externes
 
 | Service         | Rôle                       | Panne = ?                               |
-|-----------------|----------------------------|-----------------------------------------|
+| --------------- | -------------------------- | --------------------------------------- |
 | API HelloAsso   | réconciliation du paiement | 503, rejeu                              |
 | API Notion      | recherche et écriture      | 503, rejeu                              |
 | Supabase        | idempotence                | 503, rejeu — sans elle, aucune garantie |

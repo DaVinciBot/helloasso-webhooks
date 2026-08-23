@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+	adherentOf,
 	helloAssoWebhookSchema,
+	memberIdentity,
 	normalizeEmail,
 	normalizeName,
 	organizationAmount,
@@ -93,5 +95,94 @@ describe('helloAssoWebhookSchema', () => {
 			champInedit: true
 		});
 		expect(result.success).toBe(true);
+	});
+});
+
+describe('adherentOf', () => {
+	const eliott = { firstName: 'Eliott', lastName: 'Roussille' };
+	const chloe = { firstName: 'Chloé', lastName: 'Bernard' };
+
+	it("rend l'adhérent de la ligne couverte par le paiement", () => {
+		const payment = { id: 1, items: [{ id: 102729, shareAmount: 2000 }] };
+		const order = {
+			id: 95457,
+			items: [
+				{ id: 999, user: chloe },
+				{ id: 102729, user: eliott }
+			]
+		};
+
+		expect(adherentOf(payment, order)).toEqual(eliott);
+	});
+
+	it("se rabat sur la ligne de la commande quand le paiement n'en désigne aucune", () => {
+		// Le formulaire est limité à une adhésion par panier : sans id de ligne
+		// exploitable, l'unique ligne de la commande est l'adhésion payée.
+		const payment = { id: 1 };
+
+		expect(adherentOf(payment, { id: 95457, items: [{ id: 102729, user: eliott }] })).toEqual(
+			eliott
+		);
+	});
+
+	it('rend undefined quand la commande ne porte aucune identité', () => {
+		expect(adherentOf({ id: 1 }, { id: 95457, items: [{ id: 102729 }] })).toBeUndefined();
+		expect(adherentOf({ id: 1 }, { id: 95457, items: [] })).toBeUndefined();
+		expect(adherentOf({ id: 1 }, undefined)).toBeUndefined();
+	});
+
+	it("ignore une identité incomplète : elle n'apparie rien", () => {
+		const order = { id: 95457, items: [{ id: 102729, user: { firstName: 'Eliott' } }] };
+
+		expect(adherentOf({ id: 1 }, order)).toBeUndefined();
+	});
+});
+
+describe('memberIdentity', () => {
+	const payer = {
+		email: 'Austin.Jonca@Example.org',
+		firstName: 'Austin',
+		lastName: 'Jonca'
+	};
+
+	it("retient l'identité de l'adhérent, pas celle du payeur", () => {
+		const identity = memberIdentity(payer, { firstName: 'Eliott', lastName: 'Roussille' });
+
+		expect(identity).toEqual({ email: undefined, firstName: 'Eliott', lastName: 'Roussille' });
+	});
+
+	it("garde l'email quand le payeur règle sa propre adhésion", () => {
+		const identity = memberIdentity(payer, { firstName: 'austin', lastName: 'JONCA' });
+
+		expect(identity).toEqual({
+			email: 'austin.jonca@example.org',
+			firstName: 'austin',
+			lastName: 'JONCA'
+		});
+	});
+
+	it("se rabat sur le payeur quand la commande ne dit rien de l'adhérent", () => {
+		expect(memberIdentity(payer, undefined)).toEqual({
+			email: 'austin.jonca@example.org',
+			firstName: 'Austin',
+			lastName: 'Jonca'
+		});
+	});
+
+	it("écarte l'email quand le payeur est anonyme face à un adhérent nommé", () => {
+		const identity = memberIdentity(
+			{ email: 'tresorerie@example.org' },
+			{ firstName: 'Eliott', lastName: 'Roussille' }
+		);
+
+		expect(identity.email).toBeUndefined();
+	});
+
+	it("ne rend aucun critère quand rien n'est exploitable", () => {
+		expect(memberIdentity(undefined, undefined)).toEqual({
+			email: undefined,
+			firstName: undefined,
+			lastName: undefined
+		});
 	});
 });

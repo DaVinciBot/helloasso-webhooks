@@ -7,7 +7,7 @@ De zéro à la première cotisation marquée payée automatiquement, sur le VPS
 Deux environnements :
 
 | Environnement | Hôte                         | Conteneur      | Branche   | HelloAsso   |
-|---------------|------------------------------|----------------|-----------|-------------|
+| ------------- | ---------------------------- | -------------- | --------- | ----------- |
 | staging       | `hook.staging.davincibot.fr` | `hook-staging` | `staging` | bac à sable |
 | prod          | `hook.davincibot.fr`         | `hook-prod`    | `main`    | production  |
 
@@ -21,7 +21,7 @@ le brouillon de la production.
 ## Ce qu'il faut avant de commencer
 
 | Accès                                                   | Pour quoi faire                           |
-|---------------------------------------------------------|-------------------------------------------|
+| ------------------------------------------------------- | ----------------------------------------- |
 | Administrateur de l'espace Notion                       | créer l'intégration, lire l'id de base    |
 | Administrateur du compte association HelloAsso          | créer le client API, déclarer l'URL       |
 | Compte sur `helloasso-sandbox.com`                      | l'équivalent pour staging                 |
@@ -77,8 +77,8 @@ l'association, en euros, à chaque paiement traité.
 → `NOTION_AMOUNT_PROPERTY` = `<À_REMPLIR>`
 
 **1.5 bis — facultatif.** Relève les noms exacts des colonnes **prénom** et **nom**. Elles servent de repli quand aucune
-ligne ne porte l'adresse du payeur ; leur type n'a pas à être déclaré. Les deux ou aucune : n'en renseigner qu'une est
-refusé au démarrage.
+ligne ne porte son adresse — et de seul critère quand un tiers a réglé la cotisation ; leur type n'a pas à être déclaré.
+Les deux ou aucune : n'en renseigner qu'une est refusé au démarrage.
 
 → `NOTION_FIRST_NAME_PROPERTY` = `<À_REMPLIR>` \| vide → `NOTION_LAST_NAME_PROPERTY` = `<À_REMPLIR>` \| vide
 
@@ -240,7 +240,7 @@ production délibéré plutôt qu'accidentel.
 **7.2** Vérifie que ces secrets se résolvent (organisation ou environnement) :
 
 | Secret                | Valeur                                      |
-|-----------------------|---------------------------------------------|
+| --------------------- | ------------------------------------------- |
 | `WATCHTOWER_URL`      | `https://deploy.davincibot.fr`              |
 | `WATCHTOWER_TOKEN`    | `WATCHTOWER_HTTP_API_TOKEN` du VPS          |
 | `PACKAGES_READ_TOKEN` | PAT `read:packages` (secret d'organisation) |
@@ -390,7 +390,7 @@ Un 502 signifie que Caddy ne joint pas le conteneur : vérifie qu'ils partagent 
 Maintenant seulement — les URL existent et répondent.
 
 | Espace                       | URL de notification                                           |
-|------------------------------|---------------------------------------------------------------|
+| ---------------------------- | ------------------------------------------------------------- |
 | `helloasso-sandbox.com`      | `https://hook.staging.davincibot.fr/webhook/<secret staging>` |
 | `helloasso.com` (production) | `https://hook.davincibot.fr/webhook/<secret prod>`            |
 
@@ -451,8 +451,8 @@ curl -X POST "https://hook.staging.davincibot.fr/webhook/<secret staging>" \
 ## 13 — Après la mise en production
 
 - [ ] Les quatre secrets (`WEBHOOK_SECRET`, `HELLOASSO_CLIENT_SECRET`,
-  `NOTION_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`) sont dans le gestionnaire de secrets de l'association, pas seulement dans
-  les `.env` du VPS.
+      `NOTION_TOKEN`, `SUPABASE_SERVICE_ROLE_KEY`) sont dans le gestionnaire de secrets de l'association, pas seulement dans
+      les `.env` du VPS.
 - [ ] `/srv/hook/*/.env` sont en `chmod 600`.
 - [ ] L'environnement GitHub `prod` exige une approbation.
 - [ ] Le canal Discord d'alerte est surveillé par quelqu'un de la trésorerie.

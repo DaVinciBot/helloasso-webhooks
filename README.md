@@ -1,7 +1,8 @@
 # helloasso-notion-webhook
 
 Micro-service HTTP mono-endpoint : à chaque cotisation payée sur HelloAsso, il pose l'état « cotisation payée » et le
-montant revenu à l'asso sur la ligne du membre dans une base Notion, appariée par adresse email.
+montant revenu à l'asso sur la ligne de l'adhérent dans une base Notion, appariée par adresse email ou, quand
+la cotisation a été réglée par un tiers, par prénom et nom.
 
 ```
 HelloAsso ──notification──▶ POST /webhook/<secret>
@@ -19,7 +20,7 @@ auprès de l'API HelloAsso avant d'agir.
 ## Documentation
 
 | Document                                                   | Contenu                                                               |
-|------------------------------------------------------------|-----------------------------------------------------------------------|
+| ---------------------------------------------------------- | --------------------------------------------------------------------- |
 | [`docs/architecture.md`](docs/architecture.md)             | Décisions de conception, sémantique de rejeu, budget de temps         |
 | [`docs/runbook-production.md`](docs/runbook-production.md) | Mise en production, étape par étape, de zéro à la première cotisation |
 | [`docs/operations.md`](docs/operations.md)                 | Incidents courants, rejeu manuel, rotation des secrets                |
@@ -61,7 +62,7 @@ curl -X POST "http://localhost:3000/webhook/$WEBHOOK_SECRET" \
 ### Commandes
 
 | Commande          | Effet                                        |
-|-------------------|----------------------------------------------|
+| ----------------- | -------------------------------------------- |
 | `pnpm dev`        | serveur en rechargement à chaud              |
 | `pnpm dev:pretty` | idem, logs mis en forme par `pino-pretty`    |
 | `pnpm build`      | compilation TypeScript vers `dist/`          |
@@ -119,7 +120,7 @@ applications : réseau `web`,
 `/srv/<service>/<env>/`, image taguée par la branche, Watchtower déclenché par CI via son API HTTP.
 
 | Environnement | Hôte                         | Conteneur      | Branche   | Déploiement             |
-|---------------|------------------------------|----------------|-----------|-------------------------|
+| ------------- | ---------------------------- | -------------- | --------- | ----------------------- |
 | staging       | `hook.staging.davincibot.fr` | `hook-staging` | `staging` | automatique             |
 | prod          | `hook.davincibot.fr`         | `hook-prod`    | `main`    | manuel, sur approbation |
 

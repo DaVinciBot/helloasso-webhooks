@@ -6,13 +6,18 @@ import type { Logger } from './logger.js';
 import type { NotionPort } from './notion.js';
 import {
 	PAYMENT_EVENT_TYPE,
+	adherentOf,
 	helloAssoPaymentSchema,
 	helloAssoWebhookSchema,
+	memberIdentity,
 	normalizeEmail,
 	normalizeName,
 	organizationAmount,
 	toPaymentId,
-	type HelloAssoOrderRef
+	type HelloAssoOrder,
+	type HelloAssoOrderRef,
+	type HelloAssoPayer,
+	type HelloAssoPayment
 } from './schema.js';
 
 /**
@@ -191,9 +196,13 @@ async function handlePayment(
 	}
 
 	const amount = organizationAmount(payment);
-	const email = normalizeEmail(payment.payer?.email);
-	const firstName = payment.payer?.firstName;
-	const lastName = payment.payer?.lastName;
+
+	// Le paiement ne connaît que le payeur ; l'adhésion, elle, est portée par la
+	// commande. Tant qu'un tiers peut régler la cotisation d'un membre, c'est
+	// cette seconde lecture qui dit *qui* marquer payé.
+	const order = await fetchOrder(payment, logger, deps);
+	const { email, firstName, lastName } = memberIdentity(payment.payer, adherentOf(payment, order));
+
 	if (
 		email === undefined &&
 		(normalizeName(firstName) === undefined || normalizeName(lastName) === undefined)
@@ -216,6 +225,7 @@ async function handlePayment(
 				prénom: firstName,
 				nom: lastName,
 				montant: amount === undefined ? undefined : `${amount.toFixed(2)} €`,
+				payeur: describePayer(payment.payer, firstName, lastName),
 				action: "vérifier l'adresse et le nom du membre dans la base Notion"
 			}
 		});
@@ -246,8 +256,54 @@ async function handlePayment(
 	// Marquage en dernier : si le process meurt entre l'écriture Notion et ce
 	// point, le rejeu reposera un état déjà posé — opération sans effet —
 	// puis marquera. L'ordre inverse risquerait au contraire de perdre l'écriture.
-	await deps.dedup.markProcessed(paymentId, email);
+	// La colonne garde l'email du *payeur* : trace du règlement, pas critère.
+	await deps.dedup.markProcessed(paymentId, normalizeEmail(payment.payer?.email));
 
 	logger.info({ email, matchedBy, pages: pageIds.length }, 'paiement traité');
 	return { status: 'updated', paymentId, email, matchedBy, pageIds };
+}
+
+/**
+ * Relit la commande du paiement, seule porteuse de l'identité de l'adhérent.
+ *
+ * Sans référence de commande exploitable il n'y a rien à lire : on continue
+ * avec le payeur pour seul repère plutôt que d'abandonner un paiement valide —
+ * dans le cas courant, payeur et adhérent sont la même personne.
+ */
+async function fetchOrder(
+	payment: HelloAssoPayment,
+	logger: Logger,
+	deps: ProcessDeps
+): Promise<HelloAssoOrder | undefined> {
+	const orderId = payment.order?.id;
+	if (orderId === undefined) {
+		logger.warn('paiement sans référence de commande, appariement sur le payeur');
+		return undefined;
+	}
+
+	return await deps.helloasso.getOrder(String(orderId), { signal: deps.signal });
+}
+
+/**
+ * Mention du payeur dans l'alerte, quand il n'est pas l'adhérent : sans elle,
+ * une alerte « aucune ligne Notion » sur un règlement par un tiers ne donne
+ * aucune prise pour retrouver le paiement côté HelloAsso.
+ */
+function describePayer(
+	payer: HelloAssoPayer | undefined,
+	firstName: string | undefined,
+	lastName: string | undefined
+): string | undefined {
+	const identity = [payer?.firstName, payer?.lastName].filter((part) => part !== undefined);
+	// Comparaison normalisée : « austin » et « Austin » sont la même personne,
+	// et la mentionner deux fois dans l'alerte ne ferait qu'égarer.
+	const isAdherent =
+		normalizeName(payer?.firstName) === normalizeName(firstName) &&
+		normalizeName(payer?.lastName) === normalizeName(lastName);
+	if (isAdherent || (identity.length === 0 && payer?.email === undefined)) {
+		return undefined;
+	}
+
+	const email = payer?.email === undefined ? undefined : `<${payer.email}>`;
+	return [...identity, email].filter((part) => part !== undefined).join(' ');
 }

@@ -7,7 +7,7 @@ import {
 	type CampaignFilter,
 	type ProcessDeps
 } from '../src/processPayment.js';
-import { makePayment, makePorts, silentLogger } from './helpers.js';
+import { makeOrder, makePayment, makePorts, silentLogger } from './helpers.js';
 
 const campaign: CampaignFilter = {
 	orgSlug: 'davincibot',
@@ -205,7 +205,10 @@ describe('processWebhook', () => {
 	});
 
 	it('signale un paiement sans aucun critère de recherche et alerte', async () => {
-		const doubles = makePorts({ payment: makePayment({ payer: { email: 'pas-un-email' } }) });
+		const doubles = makePorts({
+			payment: makePayment({ payer: { email: 'pas-un-email' } }),
+			order: makeOrder({ items: [] })
+		});
 		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
 
 		expect(outcome.status).toBe('data_error');
@@ -230,10 +233,108 @@ describe('processWebhook', () => {
 		expect(doubles.markProcessed).toHaveBeenCalledWith('12345', undefined);
 	});
 
-	it("transmet à Notion l'email normalisé et l'identité du payeur", async () => {
+	it("transmet à Notion l'email normalisé et l'identité de l'adhérent", async () => {
 		const doubles = makePorts();
 		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
 
+		expect(doubles.findPages).toHaveBeenCalledWith(
+			{ email: 'membre.test@example.org', firstName: 'Membre', lastName: 'Test' },
+			expect.anything()
+		);
+	});
+
+	it("apparie sur l'adhérent de la commande, pas sur le payeur", async () => {
+		// Un tiers règle la cotisation : c'est l'adhérent porté par la ligne de
+		// commande qui doit être marqué payé, et son nom seul — l'email est
+		// celui du payeur, il ne le désigne pas.
+		const doubles = makePorts({
+			payment: makePayment({
+				payer: { email: 'austin.jonca@example.org', firstName: 'Austin', lastName: 'Jonca' }
+			}),
+			order: makeOrder({
+				items: [{ id: 55501, user: { firstName: 'Eliott', lastName: 'Roussille' } }]
+			}),
+			matchedBy: 'identité'
+		});
+
+		const outcome = await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.getOrder).toHaveBeenCalledWith('98765', expect.anything());
+		expect(doubles.findPages).toHaveBeenCalledWith(
+			{ email: undefined, firstName: 'Eliott', lastName: 'Roussille' },
+			expect.anything()
+		);
+		expect(outcome).toMatchObject({ status: 'updated', matchedBy: 'identité' });
+		// La colonne garde l'email du payeur : c'est la trace du règlement.
+		expect(doubles.markProcessed).toHaveBeenCalledWith('12345', 'austin.jonca@example.org');
+	});
+
+	it("nomme le payeur dans l'alerte quand il n'est pas l'adhérent", async () => {
+		const doubles = makePorts({
+			payment: makePayment({
+				payer: { email: 'austin.jonca@example.org', firstName: 'Austin', lastName: 'Jonca' }
+			}),
+			order: makeOrder({
+				items: [{ id: 55501, user: { firstName: 'Eliott', lastName: 'Roussille' } }]
+			}),
+			notionPages: []
+		});
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.notify.mock.calls[0]?.[0]).toMatchObject({
+			fields: {
+				prénom: 'Eliott',
+				nom: 'Roussille',
+				payeur: 'Austin Jonca <austin.jonca@example.org>'
+			}
+		});
+	});
+
+	it("ne mentionne pas le payeur dans l'alerte quand il est l'adhérent", async () => {
+		// Le membre a réglé sa propre cotisation : la casse diffère d'un formulaire
+		// à l'autre, la personne est la même.
+		const doubles = makePorts({
+			order: makeOrder({
+				items: [{ id: 55501, user: { firstName: 'MEMBRE', lastName: 'test' } }]
+			}),
+			notionPages: []
+		});
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		const alert = doubles.notify.mock.calls[0]?.[0];
+		expect(alert?.fields).toMatchObject({ email: 'membre.test@example.org' });
+		expect(alert?.fields.payeur).toBeUndefined();
+	});
+
+	it('se rabat sur le payeur quand la commande ne porte aucun adhérent', async () => {
+		const doubles = makePorts({ order: makeOrder({ items: [] }) });
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.findPages).toHaveBeenCalledWith(
+			{ email: 'membre.test@example.org', firstName: 'Membre', lastName: 'Test' },
+			expect.anything()
+		);
+	});
+
+	it("n'appelle pas la commande quand le paiement n'est pas éligible", async () => {
+		const doubles = makePorts({ payment: makePayment({ state: 'Refused' }) });
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.getOrder).not.toHaveBeenCalled();
+	});
+
+	it("se passe de la commande quand le paiement n'en désigne aucune", async () => {
+		const doubles = makePorts({
+			payment: makePayment({ order: { organizationSlug: 'davincibot' } })
+		});
+
+		await processWebhook(notification({ id: 12345 }), makeDeps(doubles));
+
+		expect(doubles.getOrder).not.toHaveBeenCalled();
 		expect(doubles.findPages).toHaveBeenCalledWith(
 			{ email: 'membre.test@example.org', firstName: 'Membre', lastName: 'Test' },
 			expect.anything()

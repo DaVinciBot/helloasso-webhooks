@@ -6,7 +6,7 @@ import type { DedupPort } from '../src/dedup.js';
 import type { HelloAssoPort } from '../src/helloasso.js';
 import type { Logger } from '../src/logger.js';
 import type { NotionMatch, NotionPort } from '../src/notion.js';
-import type { HelloAssoPayment } from '../src/schema.js';
+import type { HelloAssoOrder, HelloAssoPayment } from '../src/schema.js';
 
 /** Logger muet : les tests vérifient des comportements, pas des sorties de log. */
 export const silentLogger: Logger = pino({ level: 'silent' });
@@ -69,6 +69,21 @@ export function makePayment(overrides: Partial<HelloAssoPayment> = {}): HelloAss
 	};
 }
 
+/**
+ * Commande telle que la renverrait HelloAsso. C'est elle — et pas le paiement —
+ * qui porte l'identité de l'adhérent.
+ */
+export function makeOrder(overrides: Partial<HelloAssoOrder> = {}): HelloAssoOrder {
+	return {
+		id: 98765,
+		formSlug: 'adhesion-2026-2027',
+		formType: 'Membership',
+		organizationSlug: 'davincibot',
+		items: [{ id: 55501, user: { firstName: 'Membre', lastName: 'Test' } }],
+		...overrides
+	};
+}
+
 export interface FakePorts {
 	helloasso: HelloAssoPort;
 	notion: NotionPort;
@@ -78,6 +93,7 @@ export interface FakePorts {
 
 export interface FakePortOptions {
 	payment?: HelloAssoPayment;
+	order?: HelloAssoOrder;
 	processedIds?: Set<string>;
 	/** Lignes rendues par la recherche Notion ; vide = aucun appariement. */
 	notionPages?: string[];
@@ -95,6 +111,9 @@ export function makePorts(options: FakePortOptions = {}) {
 
 	const getPayment = vi.fn((): Promise<HelloAssoPayment> =>
 		Promise.resolve(options.payment ?? makePayment())
+	);
+	const getOrder = vi.fn((): Promise<HelloAssoOrder> =>
+		Promise.resolve(options.order ?? makeOrder())
 	);
 	const findPages = vi.fn((): Promise<NotionMatch | undefined> =>
 		Promise.resolve(
@@ -114,11 +133,20 @@ export function makePorts(options: FakePortOptions = {}) {
 	const notify = vi.fn((_alert: Alert): Promise<void> => Promise.resolve());
 
 	const ports: FakePorts = {
-		helloasso: { getPayment },
+		helloasso: { getPayment, getOrder },
 		notion: { findPages, markPaid },
 		dedup: { isProcessed, markProcessed },
 		alerts: { notify }
 	};
 
-	return { ports, getPayment, findPages, markPaid, isProcessed, markProcessed, notify };
+	return {
+		ports,
+		getPayment,
+		getOrder,
+		findPages,
+		markPaid,
+		isProcessed,
+		markProcessed,
+		notify
+	};
 }
