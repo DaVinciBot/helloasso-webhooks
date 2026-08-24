@@ -240,7 +240,7 @@ Le service se conforme aux conventions d'infrastructure de DaVinciBot plutôt qu
 | image `ghcr.io/davincibot/<repo>:<branche>`      | `:staging`, `:main`, plus `:sha-<commit>` pour le retour arrière |
 | Caddy en conteneur, `caddy:2`                    | blocs ajoutés à `/srv/proxy/Caddyfile`                           |
 | Watchtower `--http-api-update --label-enable`    | label `com.centurylinklabs.watchtower.enable=true`               |
-| `DaVinciBot/shared-workflows@v7.0.2`             | `ci.yml`, `container.yml`, `deploy.yml`, `security-scan.yml`     |
+| `DaVinciBot/shared-workflows@v7.1.1`             | `ci.yml`, `container.yml`, `deploy.yml`, `security-scan.yml`     |
 
 Deux conséquences méritent d'être explicites.
 
@@ -270,7 +270,7 @@ bloquerait la publication. Elle y ajoute
 | étage `pnpm install --prod` dédié au `Dockerfile` | `pnpm deploy` suppose un workspace ; `--legacy` est en voie de retrait. C'est aussi ce que fait `auth`      |
 | `node:24.11.0-slim`, utilisateur `node`           | le runbook a besoin d'un shell pour le diagnostic ; c'est aussi la base du reste de la flotte               |
 | `deploy/staging/` et `deploy/prod/`               | la flotte range un compose par environnement sous `/srv/<service>/<env>/`                                   |
-| `DaVinciBot/shared-workflows@v7.0.2`              | le déclenchement Watchtower, les tags et la sonde y sont déjà encodés ; les réécrire garantissait la dérive |
+| `DaVinciBot/shared-workflows@v7.1.1`              | le déclenchement Watchtower, les tags et la sonde y sont déjà encodés ; les réécrire garantissait la dérive |
 | schéma Supabase fixé à `helloasso`                | le rendre configurable serait une flexibilité factice, incompatible avec le typage du client Supabase       |
 
 ## Dépendances externes
