@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Image du service webhook HelloAsso -> Notion.
+# Image du service helloasso-webhooks.
 #
 # Structure multi-stage :
 # - base      : environnement Node + pnpm

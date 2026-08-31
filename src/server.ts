@@ -20,14 +20,14 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const { serve } = await import('@hono/node-server');
-const { createAlerter } = await import('./alerts.js');
-const { describeConfig, loadConfig } = await import('./config.js');
-const { createDedupStore } = await import('./dedup.js');
-const { describeError } = await import('./errors.js');
-const { createHelloAssoClient } = await import('./helloasso.js');
-const { createApp } = await import('./index.js');
-const { logger } = await import('./logger.js');
-const { createNotionClient } = await import('./notion.js');
+const { createAlerter } = await import('./adapters/discord.js');
+const { createHelloAssoClient } = await import('./adapters/helloasso.js');
+const { createProcessedPayments } = await import('./adapters/supabase/processedPayments.js');
+const { describeConfig, loadConfig } = await import('./core/config.js');
+const { describeError } = await import('./core/errors.js');
+const { logger } = await import('./core/logger.js');
+const { createApp } = await import('./http/app.js');
+const { buildHandlers } = await import('./wiring.js');
 
 const config = (() => {
 	try {
@@ -38,26 +38,34 @@ const config = (() => {
 	}
 })();
 
+const alerts = createAlerter(config.alertWebhookUrl, {
+	logger,
+	timeoutMs: config.httpTimeoutMs
+});
+
+const handlers = buildHandlers(config, { logger, alerts });
+
 const app = createApp({
 	config,
 	logger,
+	alerts,
+	handlers,
 	helloasso: createHelloAssoClient(config.helloasso, {
 		logger,
 		timeoutMs: config.httpTimeoutMs
 	}),
-	notion: createNotionClient(config.notion, {
-		logger,
-		timeoutMs: config.httpTimeoutMs
-	}),
-	dedup: createDedupStore(config.supabase, { logger }),
-	alerts: createAlerter(config.alertWebhookUrl, {
-		logger,
-		timeoutMs: config.httpTimeoutMs
-	})
+	processedPayments: createProcessedPayments(config.supabase, { logger })
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-	logger.info({ ...describeConfig(config), address: info.address }, 'service démarré');
+	logger.info(
+		{
+			...describeConfig(config),
+			handlers: handlers.map((handler) => handler.name),
+			address: info.address
+		},
+		'service démarré'
+	);
 });
 
 /** Délai laissé aux requêtes en cours avant arrêt forcé. */

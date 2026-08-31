@@ -1,8 +1,8 @@
 {
-	"name": "helloasso-notion-webhook",
-	"version": "1.0.0",
+	"name": "helloasso-webhooks",
+	"version": "2.0.0",
 	"private": true,
-	"description": "Webhook HelloAsso → Notion : coche la cotisation payée sur la ligne du membre.",
+	"description": "Notifications HelloAsso : routeur de paiements vers Notion (cotisations) et Discord (inscriptions WEI).",
 	"license": "UNLICENSED",
 	"type": "module",
 	"engines": {
@@ -14,6 +14,7 @@
 		"dev:pretty": "tsx watch src/server.ts | pino-pretty",
 		"build": "tsc -p tsconfig.build.json",
 		"start": "node dist/server.js",
+		"backfill:wei": "tsx src/scripts/backfillWei.ts",
 		"check": "tsc --noEmit",
 		"lint": "prettier --check . && eslint . --max-warnings=0",
 		"format": "prettier --write . && eslint . --fix",

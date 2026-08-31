@@ -1,6 +1,6 @@
 # Runbook — mise en production
 
-De zéro à la première cotisation marquée payée automatiquement, sur le VPS
+De zéro à la première cotisation marquée payée et à la première place de WEI annoncée, sur le VPS
 `davincibot.fr` et selon les conventions de la flotte : réseau Docker `web`, Caddy en conteneur,
 `/srv/<service>/<env>/`, Watchtower déclenché par CI.
 
@@ -20,16 +20,21 @@ le brouillon de la production.
 
 ## Ce qu'il faut avant de commencer
 
-| Accès                                                   | Pour quoi faire                           |
-| ------------------------------------------------------- | ----------------------------------------- |
-| Administrateur de l'espace Notion                       | créer l'intégration, lire l'id de base    |
-| Administrateur du compte association HelloAsso          | créer le client API, déclarer l'URL       |
-| Compte sur `helloasso-sandbox.com`                      | l'équivalent pour staging                 |
-| Accès au projet Supabase de production                  | appliquer la migration                    |
-| Administrateur de `DaVinciBot/helloasso-notion-webhook` | créer les environnements GitHub           |
-| Accès en écriture à `DaVinciBot/Supabased`              | committer la migration                    |
-| SSH sur le VPS `ubuntu-4gb-hel1-1`                      | créer les conteneurs, éditer le Caddyfile |
-| Gestion DNS de `davincibot.fr`                          | créer les deux sous-domaines              |
+| Accès                                             | Pour quoi faire                             |
+| ------------------------------------------------- | ------------------------------------------- |
+| Administrateur de l'espace Notion                 | créer l'intégration, lire l'id de base      |
+| Administrateur du compte association HelloAsso    | créer le client API, déclarer l'URL         |
+| Compte sur `helloasso-sandbox.com`                | l'équivalent pour staging                   |
+| Accès au projet Supabase de production            | appliquer les migrations                    |
+| Administrateur de `DaVinciBot/helloasso-webhooks` | créer les environnements GitHub             |
+| Accès en écriture à `DaVinciBot/Supabased`        | committer les migrations                    |
+| Gérer les webhooks du serveur Discord             | créer les webhooks des deux canaux internes |
+| SSH sur le VPS `ubuntu-4gb-hel1-1`                | créer les conteneurs, éditer le Caddyfile   |
+| Gestion DNS de `davincibot.fr`                    | créer les deux sous-domaines                |
+
+> **Les deux flux sont indépendants.** Si tu ne mets en ligne que la cotisation, saute tout ce qui concerne le WEI et
+> laisse `WEI_DISCORD_WEBHOOK_URL` vide — le handler ne sera pas câblé. Réciproquement, un service qui n'annonce que le
+> WEI n'a besoin d'aucune variable `NOTION_*`.
 
 ---
 
@@ -107,14 +112,34 @@ https://www.helloasso.com/associations/davincibot
 
 → `HELLOASSO_ORG_SLUG` = `<À_REMPLIR>`
 
-**2.3** _(recommandé)_ Slug du formulaire de cotisation, pour restreindre le service à cette seule campagne :
+**2.3** Les campagnes de chaque flux. Le slug est le dernier segment de l'URL du formulaire.
+
+_Cotisation_ — le slug est facultatif : laissé vide, le handler prend toutes les campagnes du type indiqué, ce qui
+convient tant que l'association n'a qu'un formulaire d'adhésion à la fois.
 
 ```
 https://www.helloasso.com/associations/davincibot/adhesions/adhesion-2026-2027
                                                             └────── slug ──────┘
 ```
 
-→ `HELLOASSO_FORM_SLUG` = `<À_REMPLIR>` (vide = toutes les campagnes)
+→ `MEMBERSHIP_FORM_TYPE` = `Membership`
+→ `MEMBERSHIP_FORM_SLUG` = `<À_REMPLIR>` (vide = toutes les campagnes de ce type)
+
+_WEI_ — le slug est **obligatoire** dès que le flux est activé :
+
+```
+https://www.helloasso.com/associations/davincibot/evenements/wei-2026
+                                                             └─ slug ─┘
+```
+
+→ `WEI_FORM_TYPE` = `Event`
+→ `WEI_FORM_SLUG` = `<À_REMPLIR>`
+
+> Sans slug, le sélecteur du WEI se réduirait à « tous les évènements » et capterait la première billetterie venue. Une
+> place de WEI attribuée à un spectateur de gala n'est pas un incident qu'on veut découvrir sur Discord.
+>
+> Il n'y a pas de risque symétrique côté cotisation : le routage essaie toujours le handler **le plus précis** d'abord,
+> donc un slug bat un type quel que soit l'ordre de déclaration.
 
 **2.4 — staging.** Même chose sur <https://www.helloasso-sandbox.com> : compte, association, formulaire d'adhésion,
 client API. Les identifiants de production ne fonctionnent pas sur le bac à sable, et réciproquement.
@@ -130,10 +155,16 @@ HELLOASSO_TOKEN_URL=https://api.helloasso-sandbox.com/oauth2/token
 
 ---
 
-## 3 — Supabase : la migration
+## 3 — Supabase : les migrations
 
-La table d'idempotence vit dans le projet Supabase de **production**, schéma
-`helloasso`. La migration est versionnée dans `DaVinciBot/Supabased`.
+Les deux tables vivent dans le projet Supabase de **production**, schéma `helloasso` :
+
+| Table                | Rôle                                                           |
+| -------------------- | -------------------------------------------------------------- |
+| `processed_payments` | idempotence, plus la colonne `handler` qui dit quel flux a agi |
+| `wei_registrations`  | registre des places du WEI, une ligne par participant          |
+
+Les migrations sont versionnées dans `DaVinciBot/Supabased`.
 
 **3.1** Depuis une copie à jour de ce dépôt :
 
@@ -141,9 +172,8 @@ La table d'idempotence vit dans le projet Supabase de **production**, schéma
 cd Supabased
 git pull
 ls supabase/migrations/20260817090000_helloasso_processed_payments.sql
+ls supabase/migrations/20260826090000_helloasso_handlers_and_wei.sql
 ```
-
-Si le fichier n'est pas sur `main`, committe-le et pousse-le avant de continuer.
 
 **3.2** Applique-la :
 
@@ -158,13 +188,17 @@ supabase db push
 `helloasso` → **Save**.
 
 > Sans elle, chaque requête du service reçoit un 404, il classe la panne comme
-> passagère et répond 503 en boucle. Aucune cotisation ne sera marquée.
+> passagère et répond 503 en boucle. Rien ne sera marqué ni annoncé.
 
-**3.4** Vérifie depuis le SQL Editor :
+**3.4** Vérifie depuis le SQL Editor — les **deux** tables doivent répondre :
 
 ```sql
-SELECT *
+SELECT payment_id, handler
     FROM helloasso.processed_payments;
+-- 0 ligne, aucune erreur, et la colonne `handler` existe.
+
+SELECT *
+    FROM helloasso.wei_registrations;
 -- 0 ligne, aucune erreur.
 ```
 
@@ -182,17 +216,34 @@ SELECT *
 
 ---
 
-## 4 — Discord : le canal d'alerte
+## 4 — Discord : deux canaux, deux usages
 
-Quand un membre paie et qu'aucune ligne Notion ne porte son adresse, le service n'a rien à marquer. Ce n'est pas une
-panne, c'est une donnée à corriger.
+Le service parle à Discord pour deux raisons distinctes, qui ne s'adressent pas aux mêmes personnes. Les deux salons
+sont internes.
 
-Serveur Discord → canal (`#tresorerie-alertes`) → **Modifier le canal** → **Intégrations** → **Créer un webhook** →
-copier l'URL.
+**4.1 — Le canal d'alerte.** Quand un membre paie et qu'aucune ligne Notion ne porte son adresse, ou qu'une commande de
+WEI ne désigne personne, le service n'a rien à faire. Ce n'est pas une panne, c'est une donnée à corriger.
+
+Serveur Discord → canal (`#reports`) → **Modifier le canal** → **Intégrations** → **Créer un webhook** → copier l'URL.
 
 → `ALERT_WEBHOOK_URL` = `<À_REMPLIR>` (vide pour désactiver ; l'évènement reste journalisé)
 
-Un second webhook vers un canal technique pour staging évite de faire sonner la trésorerie à chaque test.
+**4.2 — Le salon interne de gestion du WEI.** Chaque place prise y est annoncée, avec la liste complète des inscrits.
+C'est le salon de l'équipe qui organise le séjour.
+
+Serveur Discord → canal (`#wei-orga`) → **Modifier le canal** → **Intégrations** → **Créer un webhook** → copier l'URL.
+
+→ `WEI_DISCORD_WEBHOOK_URL` = `<À_REMPLIR>` (**vide = handler WEI désactivé**)
+
+**4.3 — La capacité.** Renseignée, les annonces affichent « 23 / 60 places » et le nombre de places restantes.
+
+→ `WEI_CAPACITY` = `<À_REMPLIR>` (facultatif)
+
+> Elle se saisit à la main parce que **l'API HelloAsso v5 ne l'expose pas** : ni le quota d'un tarif ni le nombre de
+> billets restants ne figurent dans leurs réponses. Laissée vide, l'annonce affiche le seul total d'inscrits.
+
+Des webhooks distincts vers des canaux techniques pour staging évitent de faire sonner la trésorerie et le WEI à chaque
+test.
 
 ---
 
@@ -229,7 +280,7 @@ dig +short hook.davincibot.fr hook.staging.davincibot.fr
 ## 7 — GitHub : environnements et secrets
 
 Les workflows `container.yml` et `deploy.yml` appellent
-`DaVinciBot/shared-workflows@v7.1.1`, qui déclenche Watchtower puis sonde
+`DaVinciBot/shared-workflows@v7.2.0`, qui déclenche Watchtower puis sonde
 `/health`. Deux prérequis côté dépôt.
 
 **7.1** Settings → **Environments** → créer `staging` et `prod`.
@@ -261,7 +312,7 @@ git push -u origin staging
 
 Le workflow **Container** enchaîne : CI (typage, lint, 83 tests, build), construction de l'image, scan Trivy, SBOM,
 signature cosign, publication sous
-`ghcr.io/davincibot/helloasso-notion-webhook:staging` et
+`ghcr.io/davincibot/helloasso-webhooks:staging` et
 `:sha-<commit>`.
 
 **8.2** Le job **Deploy Staging** qui suit va **échouer ou avertir** — c'est normal : aucun conteneur `hook-staging`
@@ -291,11 +342,11 @@ sudo mkdir -p /srv/hook/staging /srv/hook/prod
 ```bash
 cd /srv/hook/staging
 sudo curl -fsSL -o docker-compose.yml \
-  https://raw.githubusercontent.com/DaVinciBot/helloasso-notion-webhook/main/deploy/staging/docker-compose.yml
+  https://raw.githubusercontent.com/DaVinciBot/helloasso-webhooks/main/deploy/staging/docker-compose.yml
 
 cd /srv/hook/prod
 sudo curl -fsSL -o docker-compose.yml \
-  https://raw.githubusercontent.com/DaVinciBot/helloasso-notion-webhook/main/deploy/prod/docker-compose.yml
+  https://raw.githubusercontent.com/DaVinciBot/helloasso-webhooks/main/deploy/prod/docker-compose.yml
 ```
 
 **9.3** Crée les deux `.env` à partir de [`.env.example`](../.env.example), en reportant les valeurs des étapes 1 à 5 —
@@ -414,7 +465,7 @@ Notion de test. Carte `4242 4242 4242 4242`, date future, CVV quelconque.
 sudo docker compose -f /srv/hook/staging/docker-compose.yml logs --tail 40
 ```
 
-Cinq lignes portant le même `paymentId`, dans l'ordre :
+Cinq lignes portant le même `paymentId` et `handler: membership`, dans l'ordre :
 
 ```
 notification reçue
@@ -426,10 +477,10 @@ paiement traité
 
 **12.3** L'état est posé dans Notion, et la colonne montant porte la part de l'asso.
 
-**12.4** La trace d'idempotence existe :
+**12.4** La trace d'idempotence existe, et nomme le flux qui a agi :
 
 ```sql
-SELECT *
+SELECT payment_id, handler, processed_at
     FROM helloasso.processed_payments
     ORDER BY processed_at DESC
     LIMIT 5;
@@ -444,7 +495,45 @@ curl -X POST "https://hook.staging.davincibot.fr/webhook/<secret staging>" \
 # {"status":"already_handled",…}
 ```
 
-**12.6** Répète en production avec une vraie cotisation — idéalement la tienne.
+**12.6 — le flux WEI.** Achète une place sur le formulaire d'évènement du bac à sable, en saisissant un prénom et un nom
+au niveau du **participant** (pas seulement du payeur).
+
+Attendu dans les logs, avec `handler: wei` :
+
+```
+notification reçue
+paiement réconcilié auprès de HelloAsso
+places inscrites et annoncées      (arrivants: 1, inscrits: 1)
+paiement traité
+```
+
+Et un message dans le salon de gestion du WEI, nommant l'arrivant et listant les inscrits.
+
+Vérifie le registre :
+
+```sql
+SELECT item_id, first_name, last_name, payment_id, registered_at
+    FROM helloasso.wei_registrations
+    ORDER BY registered_at;
+```
+
+Puis rejoue la même notification : le service répond `already_handled` et **aucun second message** ne part. C'est la
+garantie qui compte — le canal ne se remplira pas de doublons le jour où HelloAsso relivrera.
+
+**12.7 — amorcer le registre, si des places ont déjà été vendues.** Le service n'a vu passer aucune des notifications
+antérieures à sa mise en ligne. Rattrape-les avant la première vraie annonce, pour que la liste parte complète :
+
+```bash
+sudo docker compose -f /srv/hook/prod/docker-compose.yml \
+  exec app node dist/scripts/backfillWei.js --dry-run
+# vérifie la liste, puis sans --dry-run
+```
+
+Le script n'annonce rien sur Discord, et les lignes qu'il écrit portent un `payment_id` nul : elles ne seront jamais
+comptées comme arrivantes.
+
+**12.8** Répète en production avec une vraie cotisation — idéalement la tienne — et, si le WEI est ouvert, une vraie
+place.
 
 ---
 
@@ -456,8 +545,12 @@ curl -X POST "https://hook.staging.davincibot.fr/webhook/<secret staging>" \
 - [ ] `/srv/hook/*/.env` sont en `chmod 600`.
 - [ ] L'environnement GitHub `prod` exige une approbation.
 - [ ] Le canal Discord d'alerte est surveillé par quelqu'un de la trésorerie.
+- [ ] Le canal d'annonces du WEI est **distinct** de celui des alertes.
+- [ ] `WEI_CAPACITY` correspond au nombre de places réellement ouvertes.
+- [ ] Le registre du WEI a été amorcé si des places avaient déjà été vendues.
 - [ ] Un push sur `staging` déploie bien tout seul (le vérifier une fois).
-- [ ] Lire [`operations.md`](operations.md) — au moins « un membre a payé, mais son état n'a pas changé ».
+- [ ] Lire [`operations.md`](operations.md) — au moins « un membre a payé, mais son état n'a pas changé » et « une place
+      de WEI a été payée, mais rien n'a été annoncé ».
 
 ---
 
@@ -491,5 +584,5 @@ cd /srv/hook/prod && sudo docker compose down
 Les notifications HelloAsso échoueront alors, seront rejouées un temps, puis abandonnées. Les cotisations reçues pendant
 l'arrêt devront être rattrapées — voir [`operations.md`](operations.md) § rattrapage.
 
-Le service ne fait rien d'irréversible : ni côté HelloAsso, qu'il se contente de lire, ni côté Supabase, dont la table
-ne sert qu'à ne pas se répéter.
+Le service ne fait rien d'irréversible : ni côté HelloAsso, qu'il se contente de lire, ni côté Supabase, où seul le
+registre du WEI porte une donnée qui compte — et il ne s'y écrit qu'en ajout.

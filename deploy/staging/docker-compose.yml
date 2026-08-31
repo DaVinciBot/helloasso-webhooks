@@ -2,15 +2,16 @@
 #
 # Identique à la production, au tag et au nom près. Le .env de cet
 # environnement doit pointer vers le bac à sable HelloAsso
-# (api.helloasso-sandbox.com) et une base Notion de test : c'est tout l'intérêt
-# de cet environnement, dérouler un vrai paiement sans mouvement d'argent ni
-# tunnel vers un poste de développement.
+# (api.helloasso-sandbox.com), une base Notion de test et des salons Discord de
+# test : c'est tout l'intérêt de cet environnement, dérouler un vrai paiement —
+# cotisation ou place de WEI — sans mouvement d'argent, sans polluer le salon du
+# bureau, et sans tunnel vers un poste de développement.
 
 name: hook-staging
 
 services:
   app:
-    image: ghcr.io/davincibot/helloasso-notion-webhook:staging
+    image: ghcr.io/davincibot/helloasso-webhooks:staging
     container_name: hook-staging
     restart: unless-stopped
     env_file: .env

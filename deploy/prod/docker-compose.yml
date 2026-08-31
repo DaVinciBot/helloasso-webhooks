@@ -14,7 +14,7 @@ name: hook-prod
 
 services:
   app:
-    image: ghcr.io/davincibot/helloasso-notion-webhook:main
+    image: ghcr.io/davincibot/helloasso-webhooks:main
     container_name: hook-prod
     restart: unless-stopped
     env_file: .env
