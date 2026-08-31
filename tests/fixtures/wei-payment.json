@@ -1,0 +1,47 @@
+{
+	"data": {
+		"order": {
+			"id": 80001,
+			"date": "2026-08-26T09:41:03.000Z",
+			"formSlug": "wei-2026",
+			"formType": "Event",
+			"organizationSlug": "davincibot"
+		},
+		"payer": {
+			"email": "Lucie.Martin@Example.Org",
+			"firstName": "Lucie",
+			"lastName": "Martin",
+			"country": "FRA"
+		},
+		"items": [
+			{
+				"id": 901,
+				"shareAmount": 4500,
+				"shareItemAmount": 4500,
+				"type": "Registration",
+				"state": "Processed"
+			},
+			{
+				"id": 902,
+				"shareAmount": 4500,
+				"shareItemAmount": 4500,
+				"type": "Registration",
+				"state": "Processed"
+			}
+		],
+		"cashOutState": "Transfered",
+		"paymentReceiptUrl": "https://www.helloasso.com/associations/davincibot/evenements/wei-2026/paiement/70001",
+		"id": 70001,
+		"amount": 9000,
+		"date": "2026-08-26T09:41:05.000Z",
+		"paymentMeans": "Card",
+		"installmentNumber": 1,
+		"state": "Authorized",
+		"meta": {
+			"createdAt": "2026-08-26T09:41:05.000Z",
+			"updatedAt": "2026-08-26T09:41:06.000Z"
+		}
+	},
+	"eventType": "Payment",
+	"metadata": {}
+}
