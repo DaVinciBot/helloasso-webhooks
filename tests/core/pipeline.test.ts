@@ -7,6 +7,7 @@ import {
 	MEMBERSHIP_SLUG,
 	WEI_SLUG,
 	makeAlerts,
+	makeFreeOrder,
 	makeHelloAsso,
 	makePayment,
 	makeProcessedPayments,
@@ -76,6 +77,24 @@ function notification(overrides: Record<string, unknown> = {}): unknown {
 			}
 		},
 		...overrides
+	};
+}
+
+/**
+ * Notification `Order`, telle qu'observée en sandbox pour une cotisation à 0€
+ * après réduction : champs de campagne à plat, montant en `{ total, ... }`.
+ */
+function orderNotification(dataOverrides: Record<string, unknown> = {}): unknown {
+	return {
+		eventType: 'Order',
+		data: {
+			id: 98250,
+			formSlug: MEMBERSHIP_SLUG,
+			formType: 'Membership',
+			organizationSlug: 'davincibot',
+			amount: { total: 0, vat: 0, discount: 3500 },
+			...dataOverrides
+		}
 	};
 }
 
@@ -297,5 +316,103 @@ describe('processNotification — résultats du handler', () => {
 		});
 
 		await expect(processNotification(notification(), deps)).rejects.toBeInstanceOf(TransientError);
+	});
+});
+
+describe('processNotification — commande gratuite (évènement Order)', () => {
+	it('ignore une commande annoncée payante, sans appeler HelloAsso', async () => {
+		const { deps, helloasso } = build();
+		const outcome = await processNotification(
+			orderNotification({ amount: { total: 2000 } }),
+			deps
+		);
+
+		expect(outcome).toEqual({ status: 'ignored', reason: 'event_Order' });
+		expect(helloasso.getOrder).not.toHaveBeenCalled();
+	});
+
+	it('traite une commande gratuite comme un paiement à 0€', async () => {
+		const membership = membershipHandler();
+		const { deps, processedPayments } = build({
+			handlers: [membership.handler],
+			order: makeFreeOrder()
+		});
+
+		const outcome = await processNotification(orderNotification(), deps);
+
+		expect(membership.handle).toHaveBeenCalledOnce();
+		const [reconciled] = membership.handle.mock.calls[0] ?? [];
+		expect(reconciled?.amountEuros).toBe(0);
+		expect(reconciled?.payer?.email).toBe('Membre.Test@Example.Org');
+		expect(reconciled?.participants).toEqual([
+			{ itemId: '55501', firstName: 'Membre', lastName: 'Test' }
+		]);
+
+		expect(outcome).toEqual({
+			status: 'handled',
+			paymentId: 'order:98250',
+			handler: 'membership',
+			summary: { fait: 'membership' }
+		});
+		expect(processedPayments.markProcessed).toHaveBeenCalledWith({
+			paymentId: 'order:98250',
+			handler: 'membership',
+			payerEmail: 'membre.test@example.org'
+		});
+	});
+
+	it('répond « déjà traité » sans relire la commande', async () => {
+		const { deps, helloasso } = build({ processed: new Map([['order:98250', 'membership']]) });
+		const outcome = await processNotification(orderNotification(), deps);
+
+		expect(outcome).toEqual({
+			status: 'already_handled',
+			paymentId: 'order:98250',
+			handler: 'membership'
+		});
+		expect(helloasso.getOrder).not.toHaveBeenCalled();
+	});
+
+	it("ignore silencieusement si l'API dément la gratuité annoncée par le payload", async () => {
+		const membership = membershipHandler();
+		const { deps, processedPayments } = build({
+			handlers: [membership.handler],
+			order: makeFreeOrder({ amountEuros: 20 })
+		});
+
+		const outcome = await processNotification(orderNotification(), deps);
+
+		expect(outcome).toEqual({ status: 'ignored', reason: 'commande_non_gratuite' });
+		expect(membership.handle).not.toHaveBeenCalled();
+		expect(processedPayments.markProcessed).not.toHaveBeenCalled();
+	});
+
+	it("ignore une commande gratuite d'une autre organisation, sans relire la commande", async () => {
+		const { deps, helloasso } = build();
+		const outcome = await processNotification(
+			orderNotification({ organizationSlug: 'autre-asso' }),
+			deps
+		);
+
+		expect(outcome.status).toBe('ignored');
+		expect(helloasso.getOrder).not.toHaveBeenCalled();
+	});
+
+	it('convertit une DataError du handler en résultat, et alerte', async () => {
+		const handle = vi.fn(() => Promise.reject(new DataError('commande sans participant')));
+		const { deps, alerts, processedPayments } = build({
+			handlers: [{ name: 'membership', selector: { formType: 'Membership', formSlug: undefined }, handle }],
+			order: makeFreeOrder()
+		});
+
+		const outcome = await processNotification(orderNotification(), deps);
+
+		expect(outcome).toEqual({
+			status: 'data_error',
+			paymentId: 'order:98250',
+			reason: 'commande sans participant'
+		});
+		expect(alerts.notify).toHaveBeenCalledOnce();
+		expect(processedPayments.markProcessed).not.toHaveBeenCalled();
 	});
 });

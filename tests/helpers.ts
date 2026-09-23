@@ -113,6 +113,8 @@ export function makeOrder(overrides: Partial<Order> = {}): Order {
 			formType: 'Membership'
 		},
 		items: [{ id: '55501', person: { firstName: 'Membre', lastName: 'Test' } }],
+		payer: undefined,
+		amountEuros: undefined,
 		...overrides
 	};
 }
@@ -125,6 +127,15 @@ export function makeWeiPayment(overrides: Partial<Payment> = {}): Payment {
 		orderId: '80001',
 		paidItemIds: ['901', '902'],
 		payer: { email: 'lucie@example.org', firstName: 'Lucie', lastName: 'Martin' },
+		...overrides
+	});
+}
+
+/** Commande gratuite (cotisation à 0€ après réduction) : le flux `Order` la lit. */
+export function makeFreeOrder(overrides: Partial<Order> = {}): Order {
+	return makeOrder({
+		payer: { email: 'Membre.Test@Example.Org', firstName: 'Membre', lastName: 'Test' },
+		amountEuros: 0,
 		...overrides
 	});
 }

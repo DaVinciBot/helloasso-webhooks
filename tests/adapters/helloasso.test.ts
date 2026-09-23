@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
 	createHelloAssoClient,
+	orderAmountEuros,
 	organizationAmountEuros,
 	toOrder,
 	toPayment,
@@ -95,6 +96,41 @@ describe('projection du format v5 vers le domaine', () => {
 
 	it("retombe sur l'identifiant demandé quand la réponse ne le porte pas", () => {
 		expect(toOrder({}, '98765').id).toBe('98765');
+	});
+
+	it('projette le payeur et le montant total, pour la commande gratuite', () => {
+		const order = toOrder(
+			{
+				id: 98250,
+				payer: { email: 'membre@example.org', firstName: 'Membre', lastName: 'Test' },
+				amount: { total: 0, vat: 0, discount: 3500 }
+			},
+			'98250'
+		);
+		expect(order.payer).toEqual({
+			email: 'membre@example.org',
+			firstName: 'Membre',
+			lastName: 'Test'
+		});
+		expect(order.amountEuros).toBe(0);
+	});
+
+	it("laisse payeur et montant à undefined quand la réponse ne les porte pas", () => {
+		const order = toOrder({ id: 98765 }, '98765');
+		expect(order.payer).toBeUndefined();
+		expect(order.amountEuros).toBeUndefined();
+	});
+});
+
+describe('orderAmountEuros', () => {
+	it('convertit le total en euros', () => {
+		expect(orderAmountEuros({ id: 1, amount: { total: 0 } })).toBe(0);
+		expect(orderAmountEuros({ id: 1, amount: { total: 2000 } })).toBe(20);
+	});
+
+	it("ne rend rien quand aucun montant n'est exploitable", () => {
+		expect(orderAmountEuros({ id: 1 })).toBeUndefined();
+		expect(orderAmountEuros({ id: 1, amount: {} })).toBeUndefined();
 	});
 });
 

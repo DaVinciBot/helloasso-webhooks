@@ -6,13 +6,21 @@ import type { PaymentHandler } from '../handlers/types.js';
 import { describeError, isDataError } from './errors.js';
 import { normalizeEmail } from './identity.js';
 import {
+	ORDER_EVENT_TYPE,
 	PAYMENT_EVENT_TYPE,
 	claimedCampaign,
+	claimedOrderSchema,
 	claimedPaymentSchema,
 	notificationSchema,
 	toIdentifier
 } from './notification.js';
-import { isAcceptedState, reconcile, type Order } from './payment.js';
+import {
+	isAcceptedState,
+	reconcile,
+	type Campaign,
+	type Order,
+	type ReconciledPayment
+} from './payment.js';
 import { couldMatchAny, matchesOrganization, selectHandler } from './routing.js';
 
 /**
@@ -73,12 +81,23 @@ export async function processNotification(body: unknown, deps: PipelineDeps): Pr
 	}
 
 	const { eventType } = envelope.data;
-	if (eventType !== PAYMENT_EVENT_TYPE) {
-		deps.logger.info({ eventType }, 'évènement hors périmètre, ignoré');
-		return { status: 'ignored', reason: `event_${eventType}` };
+
+	if (eventType === PAYMENT_EVENT_TYPE) {
+		return await processPaymentNotification(envelope.data.data, deps);
 	}
 
-	const claimed = claimedPaymentSchema.safeParse(envelope.data.data);
+	// HelloAsso n'émet un `Order` sans `Payment` que pour une commande
+	// entièrement gratuite — une cotisation à 0€ après réduction, par exemple.
+	if (eventType === ORDER_EVENT_TYPE) {
+		return await processOrderNotification(envelope.data.data, deps);
+	}
+
+	deps.logger.info({ eventType }, 'évènement hors périmètre, ignoré');
+	return { status: 'ignored', reason: `event_${eventType}` };
+}
+
+async function processPaymentNotification(data: unknown, deps: PipelineDeps): Promise<Outcome> {
+	const claimed = claimedPaymentSchema.safeParse(data);
 	if (!claimed.success) {
 		deps.logger.warn('évènement Payment sans identifiant exploitable, ignoré');
 		return { status: 'data_error', paymentId: undefined, reason: 'paiement_illisible' };
@@ -86,7 +105,7 @@ export async function processNotification(body: unknown, deps: PipelineDeps): Pr
 
 	const paymentId = toIdentifier(claimed.data.id);
 	const logger = deps.logger.child({ paymentId });
-	logger.info({ eventType }, 'notification reçue');
+	logger.info({ eventType: PAYMENT_EVENT_TYPE }, 'notification reçue');
 
 	// Pré-filtre sur le payload : purement économique. Il épargne un aller-retour
 	// OAuth + API aux notifications manifestement étrangères au service — un
@@ -166,6 +185,143 @@ async function handlePayment(
 	const order = await fetchOrder(payment.orderId, logger, deps);
 	const reconciled = reconcile(payment, order);
 
+	return await finalizeHandling(paymentId, reconciled, handler, logger, deps);
+}
+
+/** Préfixe de la clé d'idempotence des commandes gratuites, pour ne jamais collisionner avec un vrai `paymentId`. */
+const ORDER_DEDUPE_PREFIX = 'order:';
+
+function orderDedupeId(orderId: string): string {
+	return `${ORDER_DEDUPE_PREFIX}${orderId}`;
+}
+
+async function processOrderNotification(data: unknown, deps: PipelineDeps): Promise<Outcome> {
+	const claimed = claimedOrderSchema.safeParse(data);
+	if (!claimed.success) {
+		deps.logger.warn('évènement Order sans identifiant exploitable, ignoré');
+		return { status: 'data_error', paymentId: undefined, reason: 'commande_illisible' };
+	}
+
+	// Pré-filtre purement économique, au même titre que celui du flux `Payment` :
+	// une commande annoncée payante aura de toute façon son propre évènement
+	// `Payment`, inutile d'aller la relire ici. Jamais utilisé pour agir — seule
+	// la relecture authentifiée plus bas peut conclure qu'une commande est
+	// effectivement gratuite.
+	if (claimed.data.amount?.total !== 0) {
+		deps.logger.info({ eventType: ORDER_EVENT_TYPE }, 'évènement hors périmètre, ignoré');
+		return { status: 'ignored', reason: `event_${ORDER_EVENT_TYPE}` };
+	}
+
+	const orderId = toIdentifier(claimed.data.id);
+	const dedupeId = orderDedupeId(orderId);
+	const logger = deps.logger.child({ orderId });
+	logger.info({ eventType: ORDER_EVENT_TYPE }, 'notification reçue (commande gratuite annoncée)');
+
+	const announced: Campaign = {
+		organizationSlug: claimed.data.organizationSlug,
+		formSlug: claimed.data.formSlug,
+		formType: claimed.data.formType
+	};
+	const organization = matchesOrganization(announced, deps.orgSlug);
+	if (!organization.ok) {
+		logger.info({ reason: organization.reason }, 'notification hors périmètre, ignorée');
+		return { status: 'ignored', reason: organization.reason };
+	}
+	if (!couldMatchAny(announced, deps.handlers)) {
+		logger.info({ campagne: announced.formSlug }, 'aucun handler pour cette campagne, ignorée');
+		return { status: 'ignored', reason: `campagne_sans_handler:${announced.formSlug ?? ''}` };
+	}
+
+	try {
+		return await handleFreeOrder(orderId, dedupeId, logger, deps);
+	} catch (error) {
+		if (isDataError(error)) {
+			logger.warn({ err: describeError(error) }, 'incohérence de données, pas de rejeu');
+			await deps.alerts.notify({
+				title: 'Commande HelloAsso gratuite : incohérence de données',
+				fields: { commande: orderId, détail: error.message }
+			});
+			return { status: 'data_error', paymentId: dedupeId, reason: error.message };
+		}
+		throw error;
+	}
+}
+
+async function handleFreeOrder(
+	orderId: string,
+	dedupeId: string,
+	logger: Logger,
+	deps: PipelineDeps
+): Promise<Outcome> {
+	const previous = await deps.processedPayments.find(dedupeId);
+	if (previous !== undefined) {
+		logger.info({ handler: previous.handler }, 'commande déjà traitée, aucune action');
+		return { status: 'already_handled', paymentId: dedupeId, handler: previous.handler };
+	}
+
+	const order = await deps.helloasso.getOrder(orderId, { signal: deps.signal });
+	logger.info({ montant: order.amountEuros }, 'commande réconciliée auprès de HelloAsso');
+
+	const organization = matchesOrganization(order.campaign, deps.orgSlug);
+	if (!organization.ok) {
+		logger.info({ reason: organization.reason }, 'commande hors périmètre après réconciliation');
+		return { status: 'ignored', reason: organization.reason };
+	}
+
+	const handler = selectHandler(order.campaign, deps.handlers);
+	if (handler === undefined) {
+		logger.info(
+			{ campagne: order.campaign.formSlug, type: order.campaign.formType },
+			'aucun handler pour cette campagne après réconciliation'
+		);
+		return {
+			status: 'ignored',
+			reason: `campagne_sans_handler:${order.campaign.formSlug ?? ''}`
+		};
+	}
+
+	// Re-vérification authoritative : le payload pouvait annoncer une commande
+	// gratuite à tort (course avec une réduction retirée, format inattendu...).
+	// Dans ce cas on ignore silencieusement — le vrai paiement à venir aura son
+	// propre évènement `Payment`, qui couvrira la commande normalement.
+	if (order.amountEuros !== 0) {
+		logger.info(
+			{ montant: order.amountEuros },
+			'commande finalement non gratuite, ignorée (le paiement suivra son propre évènement)'
+		);
+		return { status: 'ignored', reason: 'commande_non_gratuite' };
+	}
+
+	// Paiement synthétique : `paidItemIds` vide fait retomber `participantsOf`
+	// sur toutes les lignes de la commande, exactement le comportement voulu
+	// puisqu'aucun paiement réel ne désigne les lignes couvertes.
+	const reconciled = reconcile(
+		{
+			id: dedupeId,
+			state: undefined,
+			campaign: order.campaign,
+			orderId: order.id,
+			amountEuros: 0,
+			payer: order.payer,
+			paidItemIds: []
+		},
+		order
+	);
+
+	return await finalizeHandling(dedupeId, reconciled, handler, logger, deps);
+}
+
+/**
+ * Fin commune aux deux flux, une fois le paiement (réel ou synthétique)
+ * réconcilié et le handler choisi : agir, puis marquer.
+ */
+async function finalizeHandling(
+	id: string,
+	reconciled: ReconciledPayment,
+	handler: PaymentHandler,
+	logger: Logger,
+	deps: PipelineDeps
+): Promise<Outcome> {
 	const handlerLogger = logger.child({ handler: handler.name });
 	const result = await handler.handle(reconciled, {
 		logger: handlerLogger,
@@ -178,7 +334,7 @@ async function handlePayment(
 			{ reason: result.reason, ...result.summary },
 			'paiement non résolu, pas de marquage'
 		);
-		return { status: 'unresolved', paymentId, handler: handler.name, reason: result.reason };
+		return { status: 'unresolved', paymentId: id, handler: handler.name, reason: result.reason };
 	}
 
 	// Marquage en dernier : si le process meurt entre l'action du handler et ce
@@ -188,13 +344,13 @@ async function handlePayment(
 	// La colonne garde l'email du *payeur*, normalisé : c'est la trace du
 	// règlement, jamais un critère d'appariement.
 	await deps.processedPayments.markProcessed({
-		paymentId,
+		paymentId: id,
 		handler: handler.name,
 		payerEmail: normalizeEmail(reconciled.payer?.email)
 	});
 
 	handlerLogger.info(result.summary, 'paiement traité');
-	return { status: 'handled', paymentId, handler: handler.name, summary: result.summary };
+	return { status: 'handled', paymentId: id, handler: handler.name, summary: result.summary };
 }
 
 /**

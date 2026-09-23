@@ -117,7 +117,10 @@ const paymentSchema = z.object({
 
 const orderSchema = campaignSchema.extend({
 	id: identifier.optional(),
-	items: z.array(orderItemSchema).optional()
+	items: z.array(orderItemSchema).optional(),
+	payer: payerSchema.optional(),
+	/** Structuré en `{ total, vat, discount }` côté HelloAsso ; seul `total` nous concerne. */
+	amount: z.object({ total: z.number().optional() }).optional()
 });
 
 /** Article vendu, tel que `/forms/{type}/{slug}/items` le rend. */
@@ -195,6 +198,19 @@ export function toPayment(wire: WirePayment): Payment {
 	};
 }
 
+/**
+ * Montant total de la commande, en euros. Repli sur `undefined` si l'API omet
+ * `amount.total` — ce qui fait échouer, en aval, le test « gratuite »
+ * plutôt que de laisser passer une commande dont on ne sait rien. Fonction pure.
+ */
+export function orderAmountEuros(order: WireOrder): number | undefined {
+	const cents = order.amount?.total;
+	if (cents === undefined || !Number.isFinite(cents)) {
+		return undefined;
+	}
+	return Math.round(cents) / 100;
+}
+
 /** Projette une commande v5 dans le domaine. Fonction pure. */
 export function toOrder(wire: WireOrder, fallbackId: string): Order {
 	return {
@@ -203,7 +219,9 @@ export function toOrder(wire: WireOrder, fallbackId: string): Order {
 		items: (wire.items ?? []).map((item) => ({
 			id: item.id === undefined ? undefined : toIdentifier(item.id),
 			person: item.user
-		}))
+		})),
+		payer: wire.payer,
+		amountEuros: orderAmountEuros(wire)
 	};
 }
 

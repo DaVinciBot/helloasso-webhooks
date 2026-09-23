@@ -40,6 +40,10 @@ export interface Order {
 	readonly id: string;
 	readonly campaign: Campaign;
 	readonly items: readonly OrderItem[];
+	/** Payeur de la commande. Ne sert qu'au flux commande gratuite, `undefined` ailleurs. */
+	readonly payer: Person | undefined;
+	/** Part totale revenant à l'association, en euros. Ne sert qu'au flux commande gratuite. */
+	readonly amountEuros: number | undefined;
 }
 
 /**

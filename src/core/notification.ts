@@ -34,6 +34,25 @@ export const claimedPaymentSchema = z.object({
 	order: claimedCampaignSchema.optional()
 });
 
+/**
+ * Ce que le payload prétend d'une commande, telle qu'annoncée par l'évènement
+ * `Order` — forme distincte de celle de `Payment` : HelloAsso n'émet cet
+ * évènement sans `Payment` que pour une commande entièrement gratuite (une
+ * cotisation à 0€ après réduction, par exemple), et les champs de campagne y
+ * sont à plat plutôt que nichés sous `order`.
+ *
+ * `amount.total` ne sert qu'au pré-filtre économique de `pipeline.ts` : comme
+ * le reste de ce schéma, il n'est jamais la base d'une action — seule la
+ * relecture authentifiée de la commande l'est.
+ */
+export const claimedOrderSchema = z.object({
+	id: identifier,
+	formSlug: z.string().optional(),
+	formType: z.string().optional(),
+	organizationSlug: z.string().optional(),
+	amount: z.object({ total: z.number().optional() }).optional()
+});
+
 export const notificationSchema = z.object({
 	eventType: z.string().min(1),
 	data: z.unknown(),
@@ -41,10 +60,14 @@ export const notificationSchema = z.object({
 });
 
 export type ClaimedPayment = z.infer<typeof claimedPaymentSchema>;
+export type ClaimedOrder = z.infer<typeof claimedOrderSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
 
 /** Type d'évènement porté par les notifications de paiement. */
 export const PAYMENT_EVENT_TYPE = 'Payment';
+
+/** Type d'évènement porté par les notifications de commande — seule la commande gratuite nous concerne. */
+export const ORDER_EVENT_TYPE = 'Order';
 
 /**
  * Normalise un identifiant HelloAsso en chaîne : c'est la forme stockée en base
