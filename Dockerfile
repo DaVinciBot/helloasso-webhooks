@@ -25,17 +25,21 @@ WORKDIR /app
 # --- Dépendances de production ------------------------------------------
 FROM base AS deps-prod
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+	--mount=type=secret,id=npm_token,env=NPM_TOKEN \
 	pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # --- Compilation --------------------------------------------------------
 FROM base AS build
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
+# Le jeton ne sert qu'à lire `@davincibot/database-types` sur GitHub Packages : il
+# est monté le temps de l'installation et ne reste dans aucune couche.
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+	--mount=type=secret,id=npm_token,env=NPM_TOKEN \
 	pnpm install --frozen-lockfile
 
 COPY tsconfig.json tsconfig.build.json ./
