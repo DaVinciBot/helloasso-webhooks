@@ -22,7 +22,9 @@ if (process.env.NODE_ENV !== 'production') {
 const { serve } = await import('@hono/node-server');
 const { createAlerter } = await import('./adapters/discord.js');
 const { createHelloAssoClient } = await import('./adapters/helloasso.js');
+const { createCampaignSettings } = await import('./adapters/supabase/campaignSettings.js');
 const { createProcessedPayments } = await import('./adapters/supabase/processedPayments.js');
+const { applyCampaignOverrides, overridesKey } = await import('./core/campaigns.js');
 const { describeConfig, loadConfig } = await import('./core/config.js');
 const { describeError } = await import('./core/errors.js');
 const { logger } = await import('./core/logger.js');
@@ -45,11 +47,31 @@ const alerts = createAlerter(config.alertWebhookUrl, {
 
 const handlers = buildHandlers(config, { logger, alerts });
 
+// helloasso-webhooks#1 — les campagnes de l'année se règlent depuis
+// l'administration. Les handlers ne se reconstruisent que si les réglages lus en
+// base changent ; une lecture en échec garde les derniers réglages connus.
+const campaignSettings = createCampaignSettings(config.supabase, { logger });
+let current = { key: overridesKey({}), handlers };
+
+async function currentHandlers() {
+	const overrides = await campaignSettings.current();
+	const key = overridesKey(overrides);
+	if (key !== current.key) {
+		const effective = applyCampaignOverrides(config, overrides);
+		current = { key, handlers: buildHandlers(effective, { logger, alerts }) };
+		logger.info(
+			{ handlers: current.handlers.map((handler) => handler.name), ...describeConfig(effective) },
+			'réglages des campagnes appliqués'
+		);
+	}
+	return current.handlers;
+}
+
 const app = createApp({
 	config,
 	logger,
 	alerts,
-	handlers,
+	handlers: currentHandlers,
 	helloasso: createHelloAssoClient(config.helloasso, {
 		logger,
 		timeoutMs: config.httpTimeoutMs

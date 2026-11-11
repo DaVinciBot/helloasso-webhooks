@@ -29,7 +29,11 @@ export interface AppDeps {
 	readonly helloasso: HelloAssoPort;
 	readonly processedPayments: ProcessedPaymentsPort;
 	readonly alerts: AlertPort;
-	readonly handlers: readonly PaymentHandler[];
+	/**
+	 * Les handlers, ou de quoi les obtenir à chaque notification : leurs
+	 * campagnes se règlent depuis l'administration (helloasso-webhooks#1).
+	 */
+	readonly handlers: readonly PaymentHandler[] | (() => Promise<readonly PaymentHandler[]>);
 	readonly logger: Logger;
 }
 
@@ -130,7 +134,7 @@ export function createApp(deps: AppDeps): Hono {
 				helloasso: deps.helloasso,
 				processedPayments: deps.processedPayments,
 				alerts: deps.alerts,
-				handlers: deps.handlers,
+				handlers: typeof deps.handlers === 'function' ? await deps.handlers() : deps.handlers,
 				orgSlug: deps.config.helloasso.orgSlug,
 				acceptedStates: deps.config.helloasso.acceptedStates,
 				logger,
