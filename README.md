@@ -18,6 +18,29 @@ HelloAsso ──notification──▶ POST /webhook/<secret>
 Le service n'agit **jamais** sur la seule foi du payload reçu : celui-ci n'est pas signé, il ne sert qu'à savoir de quel
 paiement on parle. Tout ce qui décide d'une action vient de `GET /v5/payments/{id}`, authentifié en OAuth2.
 
+## Le pipeline
+
+Chaque notification traverse [`src/core/pipeline.ts`](src/core/pipeline.ts), dans cet ordre :
+
+1. **Enveloppe** — le corps est validé par Zod. Seuls les évènements `Payment` sont traités, plus les `Order` sans
+   paiement (commande entièrement gratuite, une cotisation à 0 € après réduction par exemple) ; le reste est ignoré.
+2. **Pré-filtre** sur le payload : organisation (`HELLOASSO_ORG_SLUG`) et campagne annoncées. Purement économique — il
+   épargne un aller-retour OAuth aux paiements étrangers au service — et ne déclenche jamais d'action.
+3. **Dédoublonnage** — `helloasso.processed_payments` est consulté avant toute relecture : un rejeu répond sans
+   solliciter HelloAsso. La clé est le paiement seul (ou la commande, pour une commande gratuite).
+4. **Réconciliation** — `GET /v5/payments/{id}` en OAuth2. À partir d'ici plus rien ne vient du payload :
+   organisation, statut (`HELLOASSO_ACCEPTED_STATES`) et campagne sont revérifiés sur la réponse authentifiée.
+5. **Routage** par campagne vers le handler le plus précis (voir ci-dessous), puis lecture de la commande, seule à
+   porter l'identité des inscrits.
+6. **Handler** — `membership` (Notion) ou `wei` (Supabase + Discord). Le paiement n'est marqué dans
+   `processed_payments` qu'**après** l'action, et pas du tout si le handler n'a pas pu conclure : un rejeu refait
+   alors une action idempotente plutôt que d'en perdre une.
+
+Côté HTTP ([`src/http/app.ts`](src/http/app.ts)) la règle est unique : tout résultat, même « ignoré » ou « donnée
+fautive », répond **200** ; une panne passagère répond **503** pour que HelloAsso rejoue, l'idempotence rendant le
+rejeu sûr. Restent `401` (secret d'URL invalide), `400` (JSON illisible) et `413` (corps aberrant). Une donnée fautive
+(cotisation sans ligne Notion, commande WEI sans participant identifiable…) part en alerte sur `ALERT_WEBHOOK_URL`.
+
 ## Les deux flux
 
 | Handler      | Campagne                          | Ce qu'il fait                                                                                             |
@@ -150,6 +173,16 @@ d'un coup toutes les variables fautives.
 Rien n'est codé en dur : ni les noms de propriétés Notion, ni les slugs de campagne, ni la capacité du séjour, ni les
 URL d'API — le bac à sable HelloAsso s'active en changeant deux variables.
 
+| Bloc                                        | Variables                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service                                     | `PORT`, `LOG_LEVEL`, `WEBHOOK_SECRET`                                                                                                                                                                                                                                                               |
+| HelloAsso                                   | `HELLOASSO_CLIENT_ID`, `HELLOASSO_CLIENT_SECRET`, `HELLOASSO_ORG_SLUG`, `HELLOASSO_API_BASE`, `HELLOASSO_TOKEN_URL`, `HELLOASSO_ACCEPTED_STATES`                                                                                                                                                    |
+| Supabase                                    | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                                                                                                                                                                                                                                                         |
+| Alertes                                     | `ALERT_WEBHOOK_URL` (vide = alertes seulement loggées)                                                                                                                                                                                                                                              |
+| `membership`, activé par `NOTION_TOKEN`     | `MEMBERSHIP_FORM_TYPE`, `MEMBERSHIP_FORM_SLUG`, `NOTION_TOKEN`, `NOTION_DATA_SOURCE_ID`, `NOTION_VERSION`, `NOTION_EMAIL_PROPERTY`, `NOTION_EMAIL_PROPERTY_TYPE`, `NOTION_PAID_PROPERTY`, `NOTION_PAID_STATUS`, `NOTION_AMOUNT_PROPERTY`, `NOTION_FIRST_NAME_PROPERTY`, `NOTION_LAST_NAME_PROPERTY` |
+| `wei`, activé par `WEI_DISCORD_WEBHOOK_URL` | `WEI_FORM_TYPE`, `WEI_FORM_SLUG` (obligatoire), `WEI_DISCORD_WEBHOOK_URL`, `WEI_CAPACITY`                                                                                                                                                                                                           |
+| Délais                                      | `HTTP_TIMEOUT_MS` (8 s par défaut), `PROCESS_TIMEOUT_MS` (12 s, à garder sous la limite d'environ 15 s de HelloAsso)                                                                                                                                                                                |
+
 ## Base de données
 
 Le service écrit dans deux tables du schéma `helloasso` :
@@ -188,6 +221,15 @@ pnpm backfill:wei             # écrit
 Rejouable sans précaution, et il **n'annonce rien** sur Discord : les lignes qu'il écrit portent un `payment_id` nul,
 donc aucune annonce future ne les comptera parmi les arrivants.
 
+## Tests
+
+Vitest, environnement `node`. `tests/` reprend l'arborescence de `src/` (`adapters/`, `core/`, `handlers/`, `http/`,
+`scripts/`, `wiring.test.ts`) ; le pipeline est testé de bout en bout sans réseau ni serveur, les adaptateurs étant des
+ports. Les fixtures `tests/fixtures/payment.json` et `wei-payment.json` servent aussi aux `curl` du développement local.
+
+`pnpm test:unit` mesure la couverture (v8) sur `src/**/*.ts`, hors `src/server.ts`, et échoue sous **80 %** en
+instructions, branches, fonctions ou lignes.
+
 ## Tester avec le bac à sable HelloAsso
 
 Le bac à sable (`helloasso-sandbox.com`, carte de test `4242 4242 4242 4242`) permet de dérouler un vrai paiement sans
@@ -211,9 +253,31 @@ API HTTP.
 - [`deploy/prod/`](deploy/prod/docker-compose.yml) et [`deploy/staging/`](deploy/staging/docker-compose.yml) — à copier
   dans `/srv/hook/<env>/`
 - [`deploy/Caddyfile.snippet`](deploy/Caddyfile.snippet) — blocs à ajouter à `/srv/proxy/Caddyfile`
-- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v7.2.0`
+- [`.github/workflows/`](.github/workflows) — appellent `DaVinciBot/shared-workflows@v7.2.0` (voir [CI](#ci))
+
+Les déploiements sont **poussés**, pas sondés : le conteneur porte le label `com.centurylinklabs.watchtower.enable=true`
+et ne publie aucun port (Caddy le joint par le réseau `web`). Après la publication de l'image, `deploy.yml` appelle
+l'API HTTP de Watchtower (`POST /v1/update?image=ghcr.io/davincibot/helloasso-webhooks:<tag>`, secrets
+`WATCHTOWER_URL` / `WATCHTOWER_TOKEN`), qui tire l'image et recrée le conteneur, puis attend que
+`https://<hôte>/health` réponde 200. Le snippet Caddy expose `/health` et `/webhook/*` (corps limité à 256 Ko, 20 s de
+délai de réponse), répond 404 au reste et expurge le chemin des journaux.
 
 La marche à suivre complète est dans [`docs/runbook-production.md`](docs/runbook-production.md).
+
+## CI
+
+Tous les workflows appellent `DaVinciBot/shared-workflows@v7.2.0` et tournent sur `ubuntu-latest`, sur les branches
+`staging`, `main`, `release/**` et `hotfix/**` :
+
+| Workflow            | Déclencheur                                     | Rôle                                                                                                        |
+| ------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ci.yml`            | push et PR (changements Markdown seuls ignorés) | `pnpm check`, `pnpm lint`, `pnpm test:unit`, `pnpm build`                                                   |
+| `container.yml`     | push, PR, tags `v*.*.*`                         | hadolint, build, dive, dockle, Trivy ; publication sur GHCR au push ; déploie staging au push sur `staging` |
+| `deploy.yml`        | manuel (`workflow_dispatch`)                    | déploie `staging` ou `prod`, avec `image_tag` optionnel (`sha-<commit>` pour un rollback)                   |
+| `security-scan.yml` | push, PR, chaque lundi, manuel                  | dependency review, Trivy sur le dépôt, checkov                                                              |
+
+Les seuils des outils conteneur vivent à la racine : `.hadolint.yaml`, `.dive-ci`, `.dockleignore`, `.checkov.yaml`.
+Dependabot propose chaque lundi les mises à jour des actions GitHub et des dépendances npm.
 
 ## Sécurité
 
